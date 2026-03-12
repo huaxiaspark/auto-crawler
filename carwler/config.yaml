@@ -1,0 +1,239 @@
+# ============================================================
+# 山西电力交易平台爬虫 - 配置文件
+# ============================================================
+
+# 目标网站
+target_url: "https://pmos.sx.sgcc.com.cn/#/dashboard"
+
+# 浏览器设置
+browser:
+  # 连接模式:
+  #   "connect" (默认) - 通过 CDP 连接已打开且已登录的 Chrome 浏览器
+  #     要求: Chrome 启动时带 --remote-debugging-port 参数
+  #     示例: google-chrome --remote-debugging-port=9222
+  #   "launch" - 启动全新的 Chromium 浏览器（需自行处理登录）
+  mode: "connect"
+  cdp_url: "http://localhost:9222"  # Chrome DevTools Protocol 地址
+  target_url_pattern: "pmos.sx.sgcc.com.cn"  # 用于匹配目标标签页的 URL 关键词
+  headless: false            # 仅 launch 模式有效：是否无头模式
+  slow_mo: 300               # 仅 launch 模式有效：操作间隔（毫秒）
+  timeout: 30000             # 全局超时（毫秒）
+  download_dir: "./data/exports"  # 导出文件下载目录
+  viewport:
+    width: 1920
+    height: 1080
+
+# 日期范围
+date_range:
+  start_date: "2025-01-01"  # 起始日期（YYYY-MM-DD）
+  end_date: ""              # 结束日期，留空则取当天
+
+# 请求与反爬控制
+request:
+  page_interval: 2          # 每次翻页间隔（秒）
+  query_interval: 3         # 每次查询间隔（秒）
+  date_interval: 0.2        # 日期迭代间隔（秒）
+  retry_times: 3            # 失败重试次数
+  retry_interval: 5         # 重试间隔（秒）
+  export_timeout: 60        # 导出下载超时（秒）
+
+# 调度频率
+schedule:
+  enabled: false             # 是否启用定时任务
+  cron: "0 8 * * *"         # 每天8点执行（暂未使用，保留配置）
+  interval_hours: 24         # 调度间隔（小时）
+
+# 数据存储
+storage:
+  output_dir: "./data"       # 输出根目录
+  format: "csv"              # 存储格式
+  encoding: "utf-8-sig"      # CSV编码（utf-8-sig 兼容 Excel）
+
+# 日志配置
+logging:
+  level: "INFO"              # 日志级别：DEBUG / INFO / WARNING / ERROR
+  log_dir: "./logs"          # 日志目录
+  max_size_mb: 10            # 单文件最大大小（MB）
+  backup_count: 5            # 保留文件数
+
+# ============================================================
+# 爬取任务开关 - 可单独启用/禁用每个数据类别
+# ============================================================
+tasks:
+  # --- 现货出清结果 ---
+  实时市场出清概况:
+    enabled: true
+    category: "现货出清结果"
+    has_export: false
+    has_dropdown: false
+    has_pagination: true
+    export_type: "原样导出"
+
+  日前市场出清概况:
+    enabled: true
+    category: "现货出清结果"
+    has_export: true
+    has_dropdown: false
+    has_pagination: true
+    export_type: "原样导出"
+
+  日前备用总量:
+    enabled: true
+    category: "现货出清结果"
+    has_export: true
+    has_dropdown: false
+    has_pagination: false
+    export_type: "原样导出"
+
+  # --- 现货实时数据 ---
+  实时各时段出清现货电量:
+    enabled: true
+    category: "现货实时数据"
+    has_export: true
+    has_dropdown: false
+    has_pagination: false
+    export_type: "原样导出"
+
+  实时备用总量:
+    enabled: true
+    category: "现货实时数据"
+    has_export: true
+    has_dropdown: false
+    has_pagination: false
+    export_type: "原样导出"
+
+  实时节点边际电价:
+    enabled: true
+    category: "现货实时数据"
+    has_export: true
+    has_dropdown: true
+    dropdown_label: "节点名称"
+    has_pagination: false
+    export_type: "导 出"  # 该页面按钮文字含空格
+    export_all: true      # 导出按钮可一次导出所有节点数据，无需逐一选择节点
+
+  实时输电断面约束及阻塞:
+    enabled: true
+    category: "现货实时数据"
+    has_export: true
+    has_dropdown: true
+    dropdown_label: "断面名称"
+    dropdown_select_none: true  # 下拉选项含「不选」时，仅选择「不选」以获取全部数据，提高爬取效率
+    has_pagination: false
+    export_type: "原样导出"
+
+  断面约束情况及影子价格:
+    enabled: true
+    category: "现货实时数据"
+    has_export: true
+    has_dropdown: true
+    dropdown_label: "断面名称"
+    dropdown_select_none: true  # 下拉选项含「不选」时，仅选择「不选」以获取全部数据，提高爬取效率
+    has_pagination: false
+    export_type: "原样导出"
+
+  重要通道实际输电情况:
+    enabled: true
+    category: "现货实时数据"
+    has_export: true
+    has_dropdown: true
+    dropdown_label: "断面名称"
+    dropdown_select_none: true  # 下拉选项含「不选」时，仅选择「不选」以获取全部数据，提高爬取效率
+    has_pagination: false
+    export_type: "原样导出"
+
+  机组实际发电曲线:
+    enabled: true
+    category: "现货实时数据"
+    has_export: true
+    has_dropdown: true
+    dropdown_label: "机组名称"
+    dropdown_select_none: true  # 下拉选项含「不选」时，仅选择「不选」以获取设定日期的全量数据
+    has_pagination: true
+    has_page_size: true
+    export_type: "原样导出"
+
+  # --- 现货日前信息 ---
+  抽蓄电站水位:
+    enabled: true
+    category: "现货日前信息"
+    has_export: true
+    has_dropdown: false
+    has_pagination: false
+    export_type: "原样导出"
+
+  断面约束:
+    enabled: true
+    category: "现货日前信息"
+    has_export: true
+    has_dropdown: false
+    has_pagination: true
+    has_page_size: true
+    export_type: "原样导出"
+
+  日前联络线计划:
+    enabled: true
+    category: "现货日前信息"
+    has_export: true
+    has_dropdown: true
+    dropdown_label: "联络线名称"
+    has_pagination: false
+    export_type: "原样导出"
+
+  输变电设备检修计划:
+    enabled: true
+    category: "现货日前信息"
+    has_export: true
+    has_dropdown: false
+    has_pagination: true
+    has_page_size: true
+    export_type: "原样导出"
+
+  输电通道可用容量:
+    enabled: true
+    category: "现货日前信息"
+    has_export: true
+    has_dropdown: true
+    dropdown_label: "通道名称"
+    dropdown_select_none: true  # 下拉选项含「不选」时，仅选择「不选」以获取全部数据，提高爬取效率
+    has_pagination: true
+    has_page_size: true
+    export_type: "原样导出"
+
+  日前机组开机安排:
+    enabled: true
+    category: "现货日前信息"
+    has_export: true
+    has_dropdown: true
+    dropdown_label: "机组名称"
+    has_pagination: false
+    export_type: "导 出"  # 该页面按钮文字含空格
+    export_all: true      # 导出按钮可一次导出所有机组数据，无需逐一选择机组
+
+  日前节点边际电价:
+    enabled: true
+    category: "现货日前信息"
+    has_export: true
+    has_dropdown: true
+    dropdown_label: "节点名称"
+    has_pagination: false
+    export_type: "导 出"  # 该页面按钮文字含空格
+    export_all: true      # 导出按钮可一次导出所有节点数据，无需逐一选择节点
+
+  日前正负备用需求:
+    enabled: true
+    category: "现货日前信息"
+    has_export: true
+    has_dropdown: false
+    has_pagination: false
+    export_type: "原样导出"
+
+  # --- 综合查询 ---
+  节点分配因子:
+    enabled: true
+    category: "综合查询"
+    subcategory: "供需与约束 > 参数信息"
+    has_export: true
+    has_dropdown: false
+    has_pagination: true
+    export_type: "原样导出"
