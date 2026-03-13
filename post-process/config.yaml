@@ -1,0 +1,253 @@
+# 批量数据处理配置文件
+# 修改此文件以调整处理行为，无需修改 Python 代码
+
+# ── 全局设置 ──────────────────────────────────────────────
+global:
+  time_format: "%Y-%m-%d %H:%M:%S.000"   # 输出时间戳格式
+  data_root: "data"                        # 数据根目录（相对于脚本所在目录）
+  output_root: "output"                    # 输出根目录（相对于脚本所在目录）
+  max_file_size_mb: 5                      # 单文件超过此大小（MB）时自动拆分
+
+# ── 文本值映射表 ───────────────────────────────────────────
+# 用于将文本列转换为数值，key 为原始文本，value 为映射数值
+# "其他" 为兜底值，未在映射表中的值将使用该值
+value_maps:
+  limit_exceed:                            # 是否越限
+    否: 0
+    是: 1
+    其他: 2
+
+  unit_status:                             # 开停状态
+    停机: 0
+    开机: 1
+    其他: 2
+
+  test_result:                             # 当日测试结果
+    不合格: 0
+    合格: 1
+    不确定: 2
+    其他: 3
+
+# ── 二次调频时段偏移 ──────────────────────────────────────
+# 时段编号 -> [小时, 分钟]，5 时段/天
+secondary_freq_period_offsets:
+  1: [0, 0]
+  2: [4, 48]
+  3: [9, 36]
+  4: [14, 24]
+  5: [19, 12]
+
+# ── 数据处理任务列表 ──────────────────────────────────────
+# 每个任务对应 data/ 下的一个子目录
+# type 决定使用哪种处理逻辑，其余字段为该逻辑的参数
+tasks:
+
+  - name: 断面约束
+    type: section_constraints
+    sheet_name: "REPORT0"
+    skip_rows: 2
+    columns: [序号, 日期, 断面名称, 断面描述, 正向传输极限, 反向传输极限]
+    output_dir: 断面约束
+    outputs:
+      - col: 正向传输极限
+        file: 断面约束_正向传输极限
+      - col: 反向传输极限
+        file: 断面约束_反向传输极限
+    mapping_file: 断面信息映射.csv   # 输出断面名称->描述的映射文件
+
+  - name: 实时备用总量
+    type: reserve_capacity
+    skip_rows: 2
+    date_col_idx: 1
+    value_cols:
+      - {idx: 2, name: 上旋最小值}
+      - {idx: 3, name: 下旋最小值}
+    output_dir: 实时备用总量
+    output_file: 实时备用总量
+
+  - name: 日前备用总量
+    type: reserve_capacity
+    skip_rows: 2
+    date_col_idx: 1
+    value_cols:
+      - {idx: 2, name: 上旋最小值}
+      - {idx: 3, name: 下旋最小值}
+    output_dir: 日前备用总量
+    output_file: 日前备用总量
+
+  - name: 实时各时段出清现货电量
+    type: clearing_quantity
+    skip_rows: 3
+    columns: [序号, 日期, 时点, 出清现货电量]
+    output_dir: 实时各时段出清现货电量
+    output_file: 实时各时段出清现货电量
+
+  - name: 输电通道可用容量
+    type: channel_numeric
+    skip_rows: 2
+    columns: [序号, 通道名称, 日期, 时点, 可用容量]
+    name_col: 通道名称
+    value_col: 可用容量
+    output_dir: 输电通道可用容量
+    output_file: 输电通道可用容量
+
+  - name: 日前联络线计划
+    type: channel_numeric
+    skip_rows: 2
+    columns: [序号, 通道, 日期, 时点, 数值]
+    name_col: 通道
+    value_col: 数值
+    output_dir: 日前联络线计划
+    output_file: 日前联络线计划
+
+  - name: 重要通道实际输电情况
+    type: channel_numeric
+    skip_rows: 2
+    columns: [序号, 断面名称, 日期, 时点, 数值]
+    name_col: 断面名称
+    value_col: 数值
+    output_dir: 重要通道实际输电情况
+    output_file: 重要通道实际输电情况
+
+  - name: 断面约束情况及影子价格
+    type: channel_numeric
+    skip_rows: 2
+    columns: [序号, 断面名称, 日期, 时点, 数值]
+    name_col: 断面名称
+    value_col: 数值
+    output_dir: 断面约束情况及影子价格
+    output_file: 断面约束情况及影子价格
+
+  - name: 实时输电断面约束及阻塞
+    type: channel_text
+    skip_rows: 2
+    columns: [序号, 断面名称, 日期, 时点, 是否越限]
+    name_col: 断面名称
+    value_col: 是否越限
+    value_map: limit_exceed
+    output_dir: 实时输电断面约束及阻塞
+    output_file: 实时输电断面约束及阻塞
+    mapping_file: 是否越限映射.csv
+
+  - name: 实时节点边际电价
+    type: node_lmp
+    output_dir: 实时节点边际电价
+    output_prefix: 实时节点边际电价
+    lmp_columns:
+      - {keyword: 电能量价格, fallback_idx: 3, suffix: 电能量价格}
+      - {keyword: 阻塞价格,   fallback_idx: 4, suffix: 阻塞价格}
+      - {keyword: 节点电价,   fallback_idx: 5, suffix: 节点电价}
+
+  - name: 日前节点边际电价
+    type: node_lmp
+    output_dir: 日前节点边际电价
+    output_prefix: 日前节点边际电价
+    # 支持目录名前缀匹配（如 data/日前节点边际电价_xxx/）
+    dir_prefix_match: true
+    lmp_columns:
+      - {keyword: 电能量价格, fallback_idx: 3, suffix: 电能量价格}
+      - {keyword: 阻塞价格,   fallback_idx: 4, suffix: 阻塞价格}
+      - {keyword: 节点电价,   fallback_idx: 5, suffix: 节点电价}
+
+  - name: 抽蓄电站水位
+    type: reservoir_level
+    skip_rows: 2
+    columns: [序号, 日期, 描述, 数值]
+    name_col: 描述
+    value_col: 数值
+    output_dir: 抽蓄电站水位
+    output_file: 抽蓄电站水位
+
+  - name: 日前正负备用需求
+    type: reserve_demand
+    skip_rows: 2
+    columns: [序号, 日期, 备用类型, 备用负荷]
+    name_col: 备用类型
+    value_col: 备用负荷
+    output_dir: 日前正负备用需求
+    output_file: 日前正负备用需求
+
+  - name: 日前市场出清概况
+    type: clearing_overview_excel
+    skip_rows: 2
+    columns: [序号, 日期, 出清概况]
+    output_dir: 日前市场出清概况
+    output_file: 日前市场出清概况
+
+  - name: 实时市场出清概况
+    type: clearing_overview_csv
+    file_encoding: utf-8
+    header_row: 1
+    output_dir: 实时市场出清概况
+    output_file: 实时市场出清概况
+
+  - name: 日前机组开机安排
+    type: unit_commitment
+    columns: [机组名称, 日期, 时点, 开停状态]
+    name_col: 机组名称
+    status_col_keywords: [开停, 状态]
+    value_map: unit_status
+    output_dir: 日前机组开机安排
+    output_file: 日前机组开机安排
+    mapping_file: 开停状态映射.csv
+
+  - name: 节点分配因子
+    type: node_factor
+    columns: [序号, 日期, 时段, 节点名称, 分配因子]
+    name_col: 节点名称
+    value_col: 分配因子
+    output_dir: 节点分配因子
+    output_file: 节点分配因子
+
+  - name: 输变电设备检修计划
+    type: maintenance_plan
+    skip_rows: 2
+    columns: [序号, 日期, 设备名称, 设备类型, 开始时间, 结束时间]
+    output_dir: 输变电设备检修计划
+    output_file: 输变电设备检修计划
+
+  - name: 二次调频出清结果
+    type: secondary_freq_clearing
+    sheet_name: "REPORT0_C_C_C"
+    date_col: 业务日期
+    period_col: 时段
+    output_cols:
+      - timestamp
+      - 时段
+      - 调频需求容量
+      - 调频主体边际排序价格
+      - 市场出清价格（中标均价）
+      - 市场供给容量
+      - 市场限价
+      - 最大kp值
+    output_dir: 二次调频出清结果
+    output_file: 二次调频出清结果
+
+  - name: 省调煤电机组最大出力认定考核公示
+    type: coal_unit_capacity
+    sheet_name: "REPORT0"
+    name_col: 机组名称
+    date_col: 日期
+    ffill_cols:
+      - 机组名称
+      - 装机容量（MW）
+      - 月前申报最大出力（MW）
+    outputs:
+      - {col: 当日认定最大出力（MW）, file: 当日认定最大出力}
+      - {col: 装机容量（MW）,         file: 装机容量}
+      - {col: 月前申报最大出力（MW）, file: 月前申报最大出力}
+      - {col: 当日测试结果_数值,      file: 当日测试结果}
+    test_result_col: 当日测试结果
+    value_map: test_result
+    output_dir: 省调煤电机组最大出力认定考核公示
+    mapping_file: 当日测试结果映射.csv
+
+  - name: 机组实际发电曲线
+    type: unit_generation_curve
+    sheet_name: "REPORT0"
+    name_col: 机组名称
+    date_col: 日期
+    exclude_cols: [序号, 日期, 机组名称]
+    value_col: 发电量
+    output_dir: 机组实际发电曲线
+    output_file: 机组实际发电曲线
