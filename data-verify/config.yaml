@@ -10,8 +10,8 @@ global:
 
   # 校验日期范围
   date_range:
-    start: "2023-01-01"
-    end: "2023-01-05"
+    start: "2025-01-01"
+    end: "2025-01-07"
 
   # 输出报告目录（默认为脚本所在目录）
   output_directory: null  # null 表示使用脚本所在目录

@@ -250,16 +250,16 @@ def check_date_consistency(file_info: dict, cfg: dict) -> tuple[bool, dict | Non
     found_dates = []
 
     for df in frames:
-        # 检查是否有日期表头
-        for col in df.columns:
-            col_str = str(col).strip()
-            if any(kw in col_str for kw in date_keywords):
-                has_date_header = True
-                break
+        # 找出所有日期列（表头含日期关键词的列）
+        date_cols = [col for col in df.columns if any(kw in str(col).strip() for kw in date_keywords)]
+        if not date_cols:
+            continue
 
+        has_date_header = True
         scan_rows = min(perf['scan_rows_for_content'], len(df))
         for row_idx in range(scan_rows):
-            for val in df.iloc[row_idx]:
+            for col in date_cols:
+                val = df.iloc[row_idx][col]
                 dt = _try_parse_date(val, date_formats)
                 if dt is None:
                     continue
@@ -443,7 +443,9 @@ def write_missing_report(cfg: dict, missing_files: list) -> str:
 
 
 def _should_skip_error(item: dict, filters: dict) -> bool:
-    """根据过滤规则判断是否跳过该错误"""
+    """根据过滤规则判断是否跳过该错误。
+    仅当日期和通道两侧的错误均被过滤时，才整体跳过该条记录。
+    """
     date_reason = item.get('date_reason') or {}
     channel_reason = item.get('channel_reason') or {}
 
@@ -451,20 +453,24 @@ def _should_skip_error(item: dict, filters: dict) -> bool:
     skip_channel_types = filters.get('skip_error_types', {}).get('channel', [])
     skip_empty_ch = filters.get('skip_empty_channel_mismatch', True)
 
-    if not item.get('date_ok') and date_reason.get('type') in skip_date_types:
-        return True
+    # 判断日期侧是否应过滤（date_ok=True 视为无需过滤）
+    date_skip = item.get('date_ok') or date_reason.get('type') in skip_date_types
 
-    if not item.get('channel_ok') and channel_reason.get('type') in skip_channel_types:
-        return True
-
-    if not item.get('channel_ok') and channel_reason.get('type') == 'channel_mismatch' and skip_empty_ch:
+    # 判断通道侧是否应过滤
+    if item.get('channel_ok'):
+        channel_skip = True
+    elif channel_reason.get('type') in skip_channel_types:
+        channel_skip = True
+    elif channel_reason.get('type') == 'channel_mismatch' and skip_empty_ch:
         raw = channel_reason.get('table_channel_raw')
         channels = channel_reason.get('table_channels', [])
         display = str(raw).strip() if raw else (channels[0] if channels else '')
-        if not display:
-            return True
+        channel_skip = not display
+    else:
+        channel_skip = False
 
-    return False
+    # 只有两侧均可过滤时，才跳过整条记录
+    return date_skip and channel_skip
 
 
 def write_errors_report(cfg: dict, all_validator_errors: list) -> str:
@@ -685,6 +691,10 @@ def run_validator(validator_cfg: dict, cfg: dict, target_dates: list):
         'missing_count': len(all_missing),
         'missing_files': all_missing,
         'error_count': len(combined_errors),
+        'filtered_error_count': sum(
+            1 for e in combined_errors
+            if not _should_skip_error(e, filters)
+        ),
         'combined_errors': combined_errors,
         'filters': filters,
     }
@@ -731,7 +741,7 @@ def main(config_path: str = None):
     print("校验汇总")
     print("=" * 80)
     for s in summaries:
-        print(f"[{s['name']}] 文件: {s['total_files']}  删除: {s['deleted_count']}  缺失: {s['missing_count']}  错误: {s['error_count']}")
+        print(f"[{s['name']}] 文件: {s['total_files']}  删除: {s['deleted_count']}  缺失: {s['missing_count']}  错误: {s['filtered_error_count']}（含已过滤: {s['error_count']}）")
     print("=" * 80)
     print("校验完成！")
 
