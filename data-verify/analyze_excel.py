@@ -275,10 +275,8 @@ def check_date_consistency(file_info: dict, cfg: dict) -> tuple[bool, dict | Non
             'reason': f'表格中未找到日期 "{file_date_str}"，发现的日期: {unique}',
         }
     if has_date_header:
-        return False, {
-            'type': 'no_date_data',
-            'reason': '表格有日期表头但未找到任何日期数据',
-        }
+        # 有日期表头但无数据，返回 no_date_data 错误（可通过 config skip_error_types 过滤）
+        return False, {'type': 'no_date_data', 'reason': '有日期表头但无数据'}
     return False, {
         'type': 'no_date_header',
         'reason': '表格中未找到日期列（表头不含"日期""时间"等字段）',
@@ -339,6 +337,9 @@ def check_channel_consistency(file_info: dict, standard_channels: list, cfg: dic
     if has_channel_header:
         # 读取通道列原始内容
         raw_channel = _read_raw_channel_value(file_info['filepath'], channel_keywords, max_rows, max_header)
+        if not raw_channel:
+            # 有通道表头但无数据，视为通过
+            return True, None
         return False, {
             'type': 'channel_mismatch',
             'filename_channel': filename_channel,
@@ -371,26 +372,29 @@ def _read_raw_channel_value(filepath: str, channel_keywords: list, max_rows: int
     return None
 
 
-def check_completeness(directory: str, target_date: str, validator_cfg: dict) -> tuple[bool, dict]:
-    """检查指定日期的文件完整性（通道数量）"""
-    prefix = validator_cfg['file_pattern']['prefix']
+def check_completeness(files: list, target_date: str, validator_cfg: dict) -> tuple[bool, dict]:
+    """检查指定日期的文件完整性（通道数量）
+
+    files: 已发现的文件列表（由 discover_files 返回，已排除被删除的文件）
+    """
     standard_channels = validator_cfg.get('standard_channels', [])
-    expected = validator_cfg['checks']['completeness'].get('expected_count', len(standard_channels))
+    name_format = validator_cfg['file_pattern'].get('name_format', 'prefix_date')
+    default_expected = len(standard_channels) if name_format == 'prefix_date_channel' else 1
+    expected = validator_cfg['checks']['completeness'].get('expected_count', default_expected)
 
-    date_files = []
-    for root, _, files in os.walk(directory):
-        for fname in files:
-            effective = fname[2:] if fname.startswith('.~') else fname
-            if not effective.startswith(prefix.rstrip('_')):
-                continue
-            parsed = parse_date_channel_filename(effective, prefix)
-            if parsed and parsed['date'] == target_date:
-                date_files.append({'filename': fname, 'filepath': os.path.join(root, fname), **parsed})
+    date_files = [f for f in files if f['date'] == target_date]
 
-    found_channels = [f['channel'] for f in date_files]
-    missing = [ch for ch in standard_channels if ch not in found_channels]
-    counts = Counter(found_channels)
-    duplicates = [{'channel': ch, 'count': cnt} for ch, cnt in counts.items() if cnt > 1]
+    if name_format == 'prefix_date_channel':
+        # 有通道概念：按 standard_channels 计算缺失和重复
+        found_channels = [f['channel'] for f in date_files]
+        missing = [ch for ch in standard_channels if ch not in found_channels]
+        counts = Counter(found_channels)
+        duplicates = [{'channel': ch, 'count': cnt} for ch, cnt in counts.items() if cnt > 1]
+    else:
+        # 无通道概念：缺失数 = expected - 实际文件数，无重复概念
+        missing = []
+        duplicates = []
+
     is_complete = len(date_files) == expected and not missing and not duplicates
 
     return is_complete, {
@@ -428,9 +432,12 @@ def write_missing_report(cfg: dict, missing_files: list) -> str:
     with open(path, 'w', encoding='utf-8') as f:
         f.write("# 缺失文件列表\n")
         f.write(f"# 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write("# 格式: 日期,通道名称\n\n")
-        for item in sorted(missing_files, key=lambda x: (x['date'], x['channel'])):
-            f.write(f"{item['date']},{item['channel']}\n")
+        f.write("# 格式: 名称,日期,通道名称\n\n")
+        for item in sorted(missing_files, key=lambda x: (x.get('name', ''), x['date'], x['channel'] or '')):
+            name = item.get('name', '')
+            ch = item['channel'] or ''
+            parts = [p for p in [name, item['date'], ch] if p]
+            f.write(','.join(parts) + '\n')
     print(f"✅ 缺失文件列表已保存至: {path}")
     return path
 
@@ -460,47 +467,61 @@ def _should_skip_error(item: dict, filters: dict) -> bool:
     return False
 
 
-def write_errors_report(cfg: dict, validator_name: str, combined_errors: list, filters: dict) -> str:
+def write_errors_report(cfg: dict, all_validator_errors: list) -> str:
+    """将所有 validator 的错误汇总写入同一份报告
+    all_validator_errors: [{'name': str, 'errors': list, 'filters': dict}, ...]
+    """
     path = _output_path(cfg, cfg['global']['report_files']['errors'])
-    filtered = [e for e in combined_errors if not _should_skip_error(e, filters)]
-    filtered.sort(key=lambda x: (x.get('date', ''), x.get('channel', '')))
-
-    date_errors = [e for e in filtered if not e.get('date_ok')]
-    channel_errors = [e for e in filtered if not e.get('channel_ok')]
-
     with open(path, 'w', encoding='utf-8') as f:
         f.write("=" * 80 + "\n")
-        f.write(f"{validator_name} 校验错误详细报告\n")
+        f.write("数据校验错误详细报告\n")
         f.write(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write("=" * 80 + "\n\n")
 
-        # 一、日期校验错误
-        f.write("-" * 80 + "\n一、日期校验错误\n" + "-" * 80 + "\n\n")
-        if date_errors:
-            f.write(f"共 {len(date_errors)} 个:\n\n")
-            for e in date_errors:
-                _write_error_entry(f, e, 'date')
-        else:
-            f.write("✅ 无日期校验错误\n")
+        total_date_errors = 0
+        total_ch_errors = 0
 
-        # 二、通道校验错误
-        f.write("\n" + "-" * 80 + "\n二、通道校验错误\n" + "-" * 80 + "\n\n")
-        if channel_errors:
-            f.write(f"共 {len(channel_errors)} 个:\n\n")
-            for e in channel_errors:
-                _write_error_entry(f, e, 'channel')
-        else:
-            f.write("✅ 无通道校验错误\n")
+        for block in all_validator_errors:
+            validator_name = block['name']
+            combined_errors = block['errors']
+            filters = block['filters']
 
-        # 三、综合统计
-        f.write("\n" + "=" * 80 + "\n三、综合统计\n" + "=" * 80 + "\n\n")
-        date_only = sum(1 for e in filtered if not e.get('date_ok') and e.get('channel_ok'))
-        ch_only = sum(1 for e in filtered if e.get('date_ok') and not e.get('channel_ok'))
-        both = sum(1 for e in filtered if not e.get('date_ok') and not e.get('channel_ok'))
-        f.write(f"日期错误: {date_only} 个\n")
-        f.write(f"通道错误: {ch_only} 个\n")
-        f.write(f"日期+通道均错误: {both} 个\n")
-        f.write(f"总错误文件数: {len(filtered)} 个\n")
+            filtered = [e for e in combined_errors if not _should_skip_error(e, filters)]
+            filtered.sort(key=lambda x: (x.get('date', ''), x.get('channel', '')))
+
+            date_errors = [e for e in filtered if not e.get('date_ok')]
+            channel_errors = [e for e in filtered if not e.get('channel_ok')]
+            total_date_errors += len(date_errors)
+            total_ch_errors += len(channel_errors)
+
+            f.write(f"{'=' * 80}\n")
+            f.write(f"校验对象: {validator_name}\n")
+            f.write(f"{'=' * 80}\n\n")
+
+            f.write("-" * 80 + "\n一、日期校验错误\n" + "-" * 80 + "\n\n")
+            if date_errors:
+                f.write(f"共 {len(date_errors)} 个:\n\n")
+                for e in date_errors:
+                    _write_error_entry(f, e, 'date')
+            else:
+                f.write("✅ 无日期校验错误\n")
+
+            f.write("\n" + "-" * 80 + "\n二、通道校验错误\n" + "-" * 80 + "\n\n")
+            if channel_errors:
+                f.write(f"共 {len(channel_errors)} 个:\n\n")
+                for e in channel_errors:
+                    _write_error_entry(f, e, 'channel')
+            else:
+                f.write("✅ 无通道校验错误\n")
+
+            date_only = sum(1 for e in filtered if not e.get('date_ok') and e.get('channel_ok'))
+            ch_only = sum(1 for e in filtered if e.get('date_ok') and not e.get('channel_ok'))
+            both = sum(1 for e in filtered if not e.get('date_ok') and not e.get('channel_ok'))
+            f.write(f"\n小计 — 日期错误: {date_only}  通道错误: {ch_only}  均错误: {both}  总计: {len(filtered)}\n\n")
+
+        f.write("=" * 80 + "\n综合统计\n" + "=" * 80 + "\n")
+        f.write(f"日期错误合计: {total_date_errors} 个\n")
+        f.write(f"通道错误合计: {total_ch_errors} 个\n")
         f.write(f"\n报告生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
     print(f"✅ 校验错误报告已保存至: {path}")
@@ -552,6 +573,21 @@ def _write_error_entry(f, entry: dict, kind: str):
 # 主校验流程
 # ============================================================
 
+# 只有这些错误类型才代表数据内容有误，需要删除文件
+_DELETABLE_ERROR_TYPES = {'date_mismatch', 'channel_mismatch', 'read_error'}
+
+
+def _should_delete(date_ok: bool, date_reason: dict | None,
+                   channel_ok: bool, channel_reason: dict | None) -> bool:
+    """判断文件是否应被删除：仅当存在实质性数据错误时才删除。
+    有表头但无数据（no_date_data / no_channel_header 等）视为内容通过，不删除。
+    """
+    if not date_ok and date_reason and date_reason.get('type') in _DELETABLE_ERROR_TYPES:
+        return True
+    if not channel_ok and channel_reason and channel_reason.get('type') in _DELETABLE_ERROR_TYPES:
+        return True
+    return False
+
 def run_validator(validator_cfg: dict, cfg: dict, target_dates: list):
     """执行单个校验对象的完整校验流程"""
     name = validator_cfg['name']
@@ -568,27 +604,10 @@ def run_validator(validator_cfg: dict, cfg: dict, target_dates: list):
     files = discover_files(directory, validator_cfg)
     print(f"找到文件: {len(files)} 个")
 
-    # 1. 完整性校验
-    all_missing = []
-    if checks.get('completeness', {}).get('enabled'):
-        print(f"\n--- 文件完整性校验 ---")
-        for date in target_dates:
-            ok, info = check_completeness(directory, date, validator_cfg)
-            status = "✅" if ok else "❌"
-            print(f"{status} {date}: {info['total_files']}/{info['expected_count']}")
-            if not ok and info['missing_channels']:
-                sample = info['missing_channels'][:3]
-                more = f"... 共{len(info['missing_channels'])}个" if len(info['missing_channels']) > 3 else ""
-                print(f"   缺失: {sample}{more}")
-                for ch in info['missing_channels']:
-                    all_missing.append({'date': date, 'channel': ch})
-
-        if all_missing:
-            write_missing_report(cfg, all_missing)
-        print(f"完整性校验完成，缺失文件: {len(all_missing)} 个")
-
-    # 2. 内容一致性校验
+    # 1. 内容一致性校验（先校验内容，不通过则删除文件）
     combined_errors = []
+    deleted_count = 0
+    deleted_paths = set()
     if checks.get('date_consistency', {}).get('enabled') or checks.get('channel_consistency', {}).get('enabled'):
         print(f"\n--- 内容一致性校验 ---")
         total = len(files)
@@ -612,6 +631,15 @@ def run_validator(validator_cfg: dict, cfg: dict, target_dates: list):
                     'date_reason': date_reason,
                     'channel_reason': channel_reason,
                 })
+                # 仅实质性数据错误才删除（有表头无数据视为通过，不删除）
+                if _should_delete(date_ok, date_reason, channel_ok, channel_reason):
+                    try:
+                        os.remove(f['filepath'])
+                        print(f"  🗑 已删除: {f['filename']}")
+                        deleted_count += 1
+                        deleted_paths.add(f['filepath'])
+                    except OSError as e:
+                        print(f"  ⚠ 删除失败 {f['filename']}: {e}")
 
             if i % 100 == 0 or i == total:
                 print(f"  进度: {i}/{total}")
@@ -620,15 +648,45 @@ def run_validator(validator_cfg: dict, cfg: dict, target_dates: list):
         ch_err_count = sum(1 for e in combined_errors if not e['channel_ok'])
         print(f"日期一致性: {total - date_err_count}/{total} 通过")
         print(f"通道一致性: {total - ch_err_count}/{total} 通过")
+        print(f"已删除问题文件: {deleted_count} 个")
 
-        if combined_errors:
-            write_errors_report(cfg, name, combined_errors, filters)
+    # 2. 完整性校验（内容校验并清理后，统计真正缺失的文件）
+    all_missing = []
+    if checks.get('completeness', {}).get('enabled'):
+        print(f"\n--- 文件完整性校验 ---")
+        remaining_files = [f for f in files if f['filepath'] not in deleted_paths]
+        for date in target_dates:
+            ok, info = check_completeness(remaining_files, date, validator_cfg)
+            status = "✅" if ok else "❌"
+            print(f"{status} {date}: {info['total_files']}/{info['expected_count']}")
+            if not ok:
+                if info['missing_channels']:
+                    # prefix_date_channel：按通道名记录缺失
+                    sample = info['missing_channels'][:3]
+                    more = f"... 共{len(info['missing_channels'])}个" if len(info['missing_channels']) > 3 else ""
+                    print(f"   缺失通道: {sample}{more}")
+                    for ch in info['missing_channels']:
+                        all_missing.append({'name': name, 'date': date, 'channel': ch})
+                elif info['total_files'] < info['expected_count']:
+                    # prefix_date：按缺失数量计入，无通道名
+                    count = info['expected_count'] - info['total_files']
+                    print(f"   缺失文件数: {count}")
+                    for _ in range(count):
+                        all_missing.append({'name': name, 'date': date, 'channel': None})
+                if info['duplicate_channels']:
+                    print(f"   重复通道: {info['duplicate_channels']}")
+
+        print(f"完整性校验完成，缺失文件: {len(all_missing)} 个")
 
     return {
         'name': name,
         'total_files': len(files),
+        'deleted_count': deleted_count,
         'missing_count': len(all_missing),
+        'missing_files': all_missing,
         'error_count': len(combined_errors),
+        'combined_errors': combined_errors,
+        'filters': filters,
     }
 
 
@@ -647,18 +705,33 @@ def main(config_path: str = None):
     print(f"校验日期范围: {dr['start']} 至 {dr['end']}（共 {len(target_dates)} 天）")
 
     summaries = []
+    all_missing = []
+    all_validator_errors = []
     for v_cfg in cfg.get('validators', []):
         if not v_cfg.get('enabled', True):
             print(f"\n[跳过] {v_cfg['name']}（已禁用）")
             continue
         summary = run_validator(v_cfg, cfg, target_dates)
         summaries.append(summary)
+        all_missing.extend(summary['missing_files'])
+        if summary['combined_errors']:
+            all_validator_errors.append({
+                'name': summary['name'],
+                'errors': summary['combined_errors'],
+                'filters': summary['filters'],
+            })
+
+    if all_missing:
+        write_missing_report(cfg, all_missing)
+
+    if all_validator_errors:
+        write_errors_report(cfg, all_validator_errors)
 
     print("\n" + "=" * 80)
     print("校验汇总")
     print("=" * 80)
     for s in summaries:
-        print(f"[{s['name']}] 文件: {s['total_files']}  缺失: {s['missing_count']}  错误: {s['error_count']}")
+        print(f"[{s['name']}] 文件: {s['total_files']}  删除: {s['deleted_count']}  缺失: {s['missing_count']}  错误: {s['error_count']}")
     print("=" * 80)
     print("校验完成！")
 

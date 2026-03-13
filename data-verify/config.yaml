@@ -6,12 +6,12 @@
 # ============================================================
 global:
   # 数据文件目录（支持绝对路径或相对路径）
-  data_directory: "/Users/x/Desktop/汉燧智能/夏初数据/doc_verify/exports"
+  data_directory: "/Users/x/Documents/workspace/汉燧智能/auto-crawler/crawler/data"
 
   # 校验日期范围
   date_range:
     start: "2023-01-01"
-    end: "2026-01-31"
+    end: "2023-01-05"
 
   # 输出报告目录（默认为脚本所在目录）
   output_directory: null  # null 表示使用脚本所在目录
@@ -23,8 +23,8 @@ global:
 
   # 性能参数
   performance:
-    max_rows_to_scan: 100       # 读取Excel时最大行数
-    scan_rows_for_content: 60   # 扫描内容时最大行数
+    max_rows_to_scan: 50       # 读取Excel时最大行数
+    scan_rows_for_content: 50   # 扫描内容时最大行数
     max_header_attempts: 4      # 尝试的header行数（0到N-1）
     max_cols_to_scan: 20        # 扫描列数上限
 
@@ -116,6 +116,7 @@ validators:
     checks:
       completeness:
         enabled: false
+        expected_count: 1
       date_consistency:
         enabled: true
         date_header_keywords: ["日期", "时间"]
@@ -137,6 +138,7 @@ validators:
     checks:
       completeness:
         enabled: false
+        expected_count: 1
       date_consistency:
         enabled: true
         date_header_keywords: ["日期", "时间"]
@@ -158,6 +160,7 @@ validators:
     checks:
       completeness:
         enabled: false
+        expected_count: 1
       date_consistency:
         enabled: true
         date_header_keywords: ["日期", "时间"]
@@ -169,7 +172,7 @@ validators:
   # 机组实际发电曲线 - 仅日期一致性校验
   # ----------------------------------------------------------
   - name: "机组实际发电曲线"
-    enabled: false
+    enabled: true
 
     file_pattern:
       prefix: "机组实际发电曲线_"
@@ -178,7 +181,8 @@ validators:
 
     checks:
       completeness:
-        enabled: false
+        enabled: true
+        expected_count: 1
       date_consistency:
         enabled: true
         date_header_keywords: ["日期", "时间"]
