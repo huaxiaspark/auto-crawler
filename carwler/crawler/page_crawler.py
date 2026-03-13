@@ -302,6 +302,59 @@ class PageCrawler:
 
     # ── 页面自动刷新恢复 ──────────────────────────────────────────
 
+    def _is_on_task_page(self) -> bool:
+        """
+        主动检测当前页面是否仍在任务页面（而非被刷新回首页）。
+
+        检测逻辑：
+        1. 如果记录了任务 iframe ID，检查该 iframe 是否仍存在且可见
+        2. 如果当前 iframe 上下文仍有效（有表单控件），则认为在任务页面
+        3. 否则尝试检测首页特征元素（如 pxf-common-portal iframe），如果出现则确认已回首页
+
+        Returns:
+            True 表示仍在任务页面，False 表示已被跳转（需要恢复导航）
+        """
+        # 检测1：任务 iframe 是否仍存在且可见
+        if self._task_iframe_id:
+            try:
+                target = self.page.query_selector(f'iframe#{self._task_iframe_id}')
+                if target and target.is_visible():
+                    frame = target.content_frame()
+                    if frame:
+                        frame.evaluate("() => document.readyState")
+                        return True
+            except Exception:
+                pass
+            # 任务 iframe 不再可用
+            logger.debug("任务 iframe '%s' 已不可用", self._task_iframe_id)
+            return False
+
+        # 检测2：当前 ctx 是否有表单控件（说明还在内容页面）
+        try:
+            ctx = self.filter_handler.ctx
+            if ctx != self.page:
+                count = ctx.locator(
+                    "input, button, .el-date-editor, .el-select, "
+                    ".fr-trigger-editor, .fr-form-imgboard"
+                ).count()
+                if count > 0:
+                    return True
+        except Exception:
+            pass
+
+        # 检测3：首页特征 —— 侧边栏树形菜单中「信息披露」节点是否可见
+        # 如果页面被刷新回首页，侧边栏会重新加载，「信息披露」展开状态会丢失
+        try:
+            sidebar_ready = self.navigator._is_tree_node_expanded("信息披露")
+            if not sidebar_ready:
+                # 侧边栏已收起说明页面可能已刷新
+                logger.debug("侧边栏「信息披露」节点未展开，疑似已回首页")
+                return False
+        except Exception:
+            pass
+
+        return True
+
     def _recover_navigation(self, category: str, task_name: str,
                              subcategory: Optional[str] = None):
         """
@@ -312,11 +365,10 @@ class PageCrawler:
         与目标页面的 iframe（如 pxf-phbsx-other-outer）不同，
         所有后续操作（查找按钮、设置日期等）都会失败。
 
-        检测策略：
-        1. 比较 _current_iframe_id 与 _task_iframe_id（首次导航时记录的 iframe ID）
-           - 如果不一致，说明 _ensure_content_frame 检测到了错误的 iframe（首页的）
-        2. 如果 ID 一致，检查目标 iframe 是否仍然存在且 Frame 有效
-        3. 如果页面确实跳转了，重新导航到目标页面并恢复 iframe 上下文
+        检测策略（按优先级）：
+        1. 主动检测：调用 _is_on_task_page() 判断是否仍在任务页面
+        2. 如果不在任务页面，立即重新导航
+        3. 兼容原有 iframe ID 比较逻辑
 
         Args:
             category: 分类目录（如 "现货实时数据"）
@@ -328,23 +380,26 @@ class PageCrawler:
         """
         need_recover = False
 
-        if not self._task_iframe_id:
-            # 未记录任务 iframe ID（可能是非 iframe 页面），无法判断
-            return False
-
-        # ── 检测1：iframe ID 发生变化 ──
-        # _ensure_content_frame 可能已经检测到 detached 并重新匹配了一个 iframe，
-        # 但这个新 iframe 可能是首页的（如 pxf-common-portal），而非任务页面的。
-        if self._current_iframe_id != self._task_iframe_id:
+        # ── 主动检测：判断是否仍在任务页面 ──
+        if not self._is_on_task_page():
             logger.warning(
-                "检测到 iframe ID 变化: 期望 '%s', 当前 '%s'，"
-                "页面可能已被刷新回首页",
-                self._task_iframe_id, self._current_iframe_id,
+                "主动检测：当前不在任务页面，疑似被刷新回首页，"
+                "正在重新导航到「%s」...", task_name
             )
             need_recover = True
 
-        # ── 检测2：即使 ID 一致，也要验证 Frame 是否真的有效 ──
-        if not need_recover:
+        # ── 兼容检测：iframe ID 发生变化 ──
+        if not need_recover and self._task_iframe_id:
+            if self._current_iframe_id != self._task_iframe_id:
+                logger.warning(
+                    "检测到 iframe ID 变化: 期望 '%s', 当前 '%s'，"
+                    "页面可能已被刷新回首页",
+                    self._task_iframe_id, self._current_iframe_id,
+                )
+                need_recover = True
+
+        # ── 兼容检测：任务 iframe 不可见/不可用 ──
+        if not need_recover and self._task_iframe_id:
             try:
                 target = self.page.query_selector(
                     f'iframe#{self._task_iframe_id}'
@@ -354,7 +409,6 @@ class PageCrawler:
                     if frame:
                         frame.evaluate("() => document.readyState")
                         return False  # 页面正常，无需恢复
-                # iframe 不存在或不可见
                 need_recover = True
             except Exception:
                 need_recover = True
@@ -364,11 +418,15 @@ class PageCrawler:
 
         # ★ 确认需要恢复：重新导航到目标页面
         logger.warning(
-            "检测到页面已被刷新/跳转（任务 iframe '%s' 不可用），"
-            "正在重新导航到「%s」...", self._task_iframe_id, task_name
+            "确认需要恢复导航（任务 iframe '%s'），正在重新导航到「%s」...",
+            self._task_iframe_id, task_name,
         )
 
         try:
+            # 重置导航状态，确保侧边栏重新展开
+            self.navigator._info_disclosure_expanded = False
+            self.navigator._current_category = None
+
             self.navigator.navigate_to_page(category, task_name, subcategory)
 
             # 重置 iframe 记录并重新检测
@@ -772,17 +830,29 @@ class PageCrawler:
         """
         执行单次爬取（一个日期 + 一个下拉选项组合）
 
-        支持自动重试，重试前会检测页面是否被刷新回首页，
-        如果是则重新导航到目标页面并恢复 iframe 上下文。
+        支持自动重试。每次重试前会主动检测页面是否被刷新回首页：
+        - 通过 _is_on_task_page() 主动检测任务 iframe 是否仍然有效
+        - 若已跳回首页，则重新导航到目标页面并恢复 iframe 上下文，再重新执行本次任务
+        - 重试时始终重新设置日期（页面刷新后日期状态会丢失）
 
         Args:
-            date_already_set: 日期已在主流程中设置，首次尝试时跳过重复设置
+            date_already_set: 日期已在主流程中设置，首次尝试时跳过重复设置；
+                              重试时始终重新设置日期（页面刷新后日期会丢失）
         """
         subcategory = task_config.get("subcategory", None)
 
         for attempt in range(1, self.retry_times + 1):
             try:
-                # ★ 每次尝试前确保 iframe 上下文有效
+                # ★ 重试时（attempt > 1）：优先检测并恢复页面导航。
+                # 必须在 _ensure_content_frame 之前执行，因为页面刷新后
+                # _ensure_content_frame 可能会切换到首页的 iframe 而非任务页面的 iframe。
+                if attempt > 1:
+                    try:
+                        self._recover_navigation(category, task_name, subcategory)
+                    except Exception as nav_err:
+                        logger.error("恢复导航失败: %s", nav_err)
+
+                # 确保 iframe 上下文有效
                 self._ensure_content_frame()
 
                 self._do_crawl_single(
@@ -790,7 +860,8 @@ class PageCrawler:
                     dropdown_label, dropdown_value,
                     has_export, export_type, has_pagination,
                     is_clearing_summary,
-                    # 首次尝试且主流程已设置日期时，跳过重复设置
+                    # 首次尝试且主流程已设置日期时，跳过重复设置；
+                    # 重试时始终重新设置日期（页面刷新后日期会丢失）
                     skip_date_set=(date_already_set and attempt == 1),
                 )
                 return True  # 成功则退出
@@ -800,12 +871,6 @@ class PageCrawler:
                 if attempt < self.retry_times:
                     logger.info("等待 %d 秒后重试...", self.retry_interval)
                     time.sleep(self.retry_interval)
-                    # ★ 检测页面是否被刷新回首页，若是则重新导航
-                    try:
-                        self._recover_navigation(
-                            category, task_name, subcategory)
-                    except Exception as nav_err:
-                        logger.error("恢复导航失败: %s", nav_err)
                 else:
                     logger.error("已达最大重试次数，跳过此记录")
         return False
@@ -837,8 +902,16 @@ class PageCrawler:
 
         for attempt in range(1, self.retry_times + 1):
             try:
+                # ★ 重试时（attempt > 1）：优先检测并恢复页面导航，
+                # 必须在 _ensure_content_frame 之前执行。
+                if attempt > 1:
+                    try:
+                        self._recover_navigation(category, task_name, subcategory)
+                    except Exception as nav_err:
+                        logger.error("恢复导航失败: %s", nav_err)
+
                 self._ensure_content_frame()
-                # 重试时需要重新设置日期（iframe 可能已刷新导致日期丢失）
+                # 重试时需要重新设置日期（页面刷新后日期会丢失）
                 if attempt > 1:
                     self.filter_handler.set_date(date_str, quick_mode=True)
                     time.sleep(0.5)
@@ -852,12 +925,6 @@ class PageCrawler:
                 if attempt < self.retry_times:
                     logger.info("等待 %d 秒后重试...", self.retry_interval)
                     time.sleep(self.retry_interval)
-                    # ★ 检测页面是否被刷新回首页，若是则重新导航
-                    try:
-                        self._recover_navigation(
-                            category, task_name, subcategory)
-                    except Exception as nav_err:
-                        logger.error("恢复导航失败: %s", nav_err)
                 else:
                     logger.error("已达最大重试次数，跳过 [%s][%s]", task_name, date_str)
 
