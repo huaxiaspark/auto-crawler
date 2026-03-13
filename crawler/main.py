@@ -35,7 +35,7 @@ import argparse
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import yaml
 
@@ -229,28 +229,49 @@ def run_schedule(config: dict, tasks: dict, start_date: str, end_date: str):
     """
     定时调度模式
 
-    按配置的间隔循环执行爬取
+    支持两种调度方式：
+    - schedule.time 不为空：每天在指定时刻（如 "08:30"）触发
+    - schedule.time 为空：立即执行一次，然后每隔 interval_hours 小时重复
+
+    date_mode 控制每次爬取的日期范围：
+    - "yesterday"：仅爬昨天（start=yesterday, end=yesterday）
+    - "today"：仅爬今天（start=today, end=today）
+    - "range"：使用传入的 start_date/end_date，end_date 每次更新为当天
     """
     import schedule as sched_module
 
     logger = get_logger()
-    interval = config.get("schedule", {}).get("interval_hours", 24)
-
-    logger.info("定时调度模式已启动，间隔: %d 小时", interval)
+    sched_cfg = config.get("schedule", {})
+    trigger_time = sched_cfg.get("time", "")
+    interval = sched_cfg.get("interval_hours", 24)
+    date_mode = sched_cfg.get("date_mode", "yesterday")
 
     def job():
-        # 每次调度时更新 end_date 为当天
-        current_end = datetime.now().strftime("%Y-%m-%d")
-        logger.info("定时任务触发，结束日期更新为: %s", current_end)
-        run_crawler(config, tasks, start_date, current_end)
+        today = datetime.now().date()
+        yesterday = (today - timedelta(days=1)).strftime("%Y-%m-%d")
+        today_str = today.strftime("%Y-%m-%d")
 
-    # 立即执行一次
-    job()
+        if date_mode == "yesterday":
+            job_start, job_end = yesterday, yesterday
+        elif date_mode == "today":
+            job_start, job_end = today_str, today_str
+        else:  # range
+            job_start = start_date
+            job_end = today_str
 
-    # 设置定时
-    sched_module.every(interval).hours.do(job)
+        logger.info("定时任务触发，日期范围: %s ~ %s", job_start, job_end)
+        run_crawler(config, tasks, job_start, job_end)
 
-    logger.info("等待下次调度...")
+    if trigger_time:
+        logger.info("定时调度模式已启动，每天 %s 触发，date_mode=%s", trigger_time, date_mode)
+        sched_module.every().day.at(trigger_time).do(job)
+        logger.info("等待首次触发（%s）...", trigger_time)
+    else:
+        logger.info("定时调度模式已启动，间隔: %d 小时，date_mode=%s", interval, date_mode)
+        job()  # 立即执行一次
+        sched_module.every(interval).hours.do(job)
+        logger.info("等待下次调度...")
+
     try:
         while True:
             sched_module.run_pending()
