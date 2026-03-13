@@ -37,11 +37,11 @@ request:
   retry_interval: 5         # 重试间隔（秒）
   export_timeout: 60        # 导出下载超时（秒）
 
-# 调度频率
+# 调度频率（通过命令行 --schedule 参数启用定时模式）
 schedule:
-  enabled: false             # 是否启用定时任务
-  cron: "0 8 * * *"         # 每天8点执行（暂未使用，保留配置）
-  interval_hours: 24         # 调度间隔（小时）
+  enabled: false             # 保留字段，代码中暂未读取；定时模式通过 --schedule 参数控制
+  cron: "0 8 * * *"         # 保留字段，代码中暂未读取；实际调度间隔由 interval_hours 控制
+  interval_hours: 24         # 调度间隔（小时），--schedule 模式下每隔此时间重新执行一次爬取
 
 # 数据存储
 storage:

@@ -399,10 +399,10 @@ class FilterHandler:
 
         Args:
             date_str: 目标日期（YYYY-MM-DD）
-            quick_mode: 快速模式（用于 export_all 等仅需设置日期后直接导出的场景）
-                - 跳过 _wait_for_filters_ready（这些页面总是超时，浪费 15 秒）
+            quick_mode: 快速模式（用于 export_all 或无下拉但有导出按钮的任务）
+                - 跳过 _wait_for_filters_ready，减少不必要的等待
                 - 跳过日期面板关闭操作（Tab/Escape/点击空白处），
-                  因为后续的导出按钮点击会自动关闭任何打开的面板
+                  因为后续的导出按钮点击会自动关闭任何打开的面板，节省约 3 秒
         """
         import time as time_module
         start_time = time_module.time()
@@ -963,13 +963,16 @@ class FilterHandler:
         直接通过 FineReport JS API 设置空值，跳过 _wait_for_filters_ready
         和 _is_finereport_page 等检测步骤。
 
-        适用场景：已确认为 FineReport 页面，且需要在每次日期切换后重新确保
-        下拉框为空（因为 set_date 可能触发 FineReport 参数联动刷新下拉框）。
+        适用场景：在含「不选」优化的任务中，首次清空后的后续日期迭代，
+        需要在每次日期切换后重新确保下拉框为空（因为 set_date 可能触发
+        FineReport 参数联动刷新下拉框）。
 
-        如果快速清空失败，会回退到完整的 clear_dropdown_input 方法。
+        注意：此方法优先尝试 FineReport JS API，若页面不是 FineReport 或
+        JS API 调用失败，会自动回退到完整的 clear_dropdown_input 方法
+        （含页面类型检测和等待），因此对 Element UI 页面也能正确处理。
 
         Args:
-            dropdown_label: 下拉框的 widgetname
+            dropdown_label: 下拉框的 widgetname（FineReport）或标签文本（Element UI）
         """
         try:
             success = self.ctx.evaluate("""(widgetName) => {

@@ -12,26 +12,22 @@ from utils.logger import get_logger
 logger = get_logger()
 
 
-def parse_tieline_batch_file(filepath: str) -> List[Tuple[str, str, str]]:
+def parse_loss_file(filepath: str) -> Dict[str, List[Tuple[str, Optional[str]]]]:
     """
-    解析「日前联络线计划」批量查询文件，每行一条「日期+筛选条件」或「日期范围+筛选条件」。
+    解析数据校验生成的缺失文件列表（loss.txt），按任务名称分组。
 
     文件格式（UTF-8）：
-    - 两列：日期,联络线名称 → 单日单条联络线
-    - 三列：开始日期,结束日期,联络线名称 → 日期范围内该联络线
+    - 三列：名称,日期,通道名称  → 含下拉筛选的任务（如日前联络线计划）
+    - 两列：名称,日期           → 无下拉筛选的任务（如机组实际发电曲线）
     - 空行、以 # 开头的行会被忽略
 
-    示例：
-        2026-01-01,山西-河北
-        2026-01-05,2026-01-10,山西-山东
-
     Args:
-        filepath: 批量文件路径
+        filepath: loss.txt 文件路径
 
     Returns:
-        [(start_date, end_date, 联络线名称), ...]
+        {任务名称: [(日期, 通道名称或None), ...]}
     """
-    result: List[Tuple[str, str, str]] = []
+    result: Dict[str, List[Tuple[str, Optional[str]]]] = {}
     with open(filepath, "r", encoding="utf-8") as f:
         for line_no, line in enumerate(f, 1):
             line = line.strip()
@@ -39,31 +35,23 @@ def parse_tieline_batch_file(filepath: str) -> List[Tuple[str, str, str]]:
                 continue
             parts = [p.strip() for p in line.split(",")]
             if len(parts) == 2:
-                date_str, option = parts[0], parts[1]
-                if not option:
-                    logger.warning("第 %d 行：联络线名称为空，已跳过", line_no)
-                    continue
+                task_name, date_str = parts[0], parts[1]
                 try:
                     datetime.strptime(date_str, "%Y-%m-%d")
-                    result.append((date_str, date_str, option))
                 except ValueError:
-                    logger.warning("第 %d 行：日期格式错误 '%s'，应为 YYYY-MM-DD，已跳过", line_no, date_str)
-            elif len(parts) == 3:
-                start_str, end_str, option = parts[0], parts[1], parts[2]
-                if not option:
-                    logger.warning("第 %d 行：联络线名称为空，已跳过", line_no)
+                    logger.warning("第 %d 行：日期格式错误 '%s'，已跳过", line_no, date_str)
                     continue
+                result.setdefault(task_name, []).append((date_str, None))
+            elif len(parts) == 3:
+                task_name, date_str, channel = parts[0], parts[1], parts[2]
                 try:
-                    s = datetime.strptime(start_str, "%Y-%m-%d")
-                    e = datetime.strptime(end_str, "%Y-%m-%d")
-                    if s > e:
-                        logger.warning("第 %d 行：开始日期晚于结束日期，已跳过", line_no)
-                        continue
-                    result.append((start_str, end_str, option))
-                except ValueError as ve:
-                    logger.warning("第 %d 行：日期格式错误，应为 YYYY-MM-DD，已跳过: %s", line_no, ve)
+                    datetime.strptime(date_str, "%Y-%m-%d")
+                except ValueError:
+                    logger.warning("第 %d 行：日期格式错误 '%s'，已跳过", line_no, date_str)
+                    continue
+                result.setdefault(task_name, []).append((date_str, channel or None))
             else:
-                logger.warning("第 %d 行：应为 2 列(日期,联络线名称) 或 3 列(开始,结束,联络线名称)，已跳过", line_no)
+                logger.warning("第 %d 行：格式应为「名称,日期」或「名称,日期,通道名称」，已跳过", line_no)
     return result
 
 

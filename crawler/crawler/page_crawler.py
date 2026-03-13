@@ -306,10 +306,12 @@ class PageCrawler:
         """
         主动检测当前页面是否仍在任务页面（而非被刷新回首页）。
 
-        检测逻辑：
-        1. 如果记录了任务 iframe ID，检查该 iframe 是否仍存在且可见
-        2. 如果当前 iframe 上下文仍有效（有表单控件），则认为在任务页面
-        3. 否则尝试检测首页特征元素（如 pxf-common-portal iframe），如果出现则确认已回首页
+        检测逻辑（按优先级）：
+        1. 如果记录了任务 iframe ID，检查该 iframe 是否仍存在且可见且 Frame 有效；
+           若 _task_iframe_id 存在但 iframe 不可用，直接返回 False。
+        2. 若未记录 iframe ID，检查当前 ctx 是否仍有表单控件（说明还在内容页面）。
+        3. 检测侧边栏「信息披露」节点是否仍处于展开状态；
+           若已收起，说明页面可能已被刷新回首页。
 
         Returns:
             True 表示仍在任务页面，False 表示已被跳转（需要恢复导航）
@@ -342,7 +344,7 @@ class PageCrawler:
         except Exception:
             pass
 
-        # 检测3：首页特征 —— 侧边栏树形菜单中「信息披露」节点是否可见
+        # 检测3：侧边栏「信息披露」节点是否仍处于展开状态
         # 如果页面被刷新回首页，侧边栏会重新加载，「信息披露」展开状态会丢失
         try:
             sidebar_ready = self.navigator._is_tree_node_expanded("信息披露")
@@ -366,9 +368,13 @@ class PageCrawler:
         所有后续操作（查找按钮、设置日期等）都会失败。
 
         检测策略（按优先级）：
-        1. 主动检测：调用 _is_on_task_page() 判断是否仍在任务页面
-        2. 如果不在任务页面，立即重新导航
-        3. 兼容原有 iframe ID 比较逻辑
+        1. 主动检测：调用 _is_on_task_page() 判断是否仍在任务页面；
+           若 _task_iframe_id 已记录，该方法内部已包含 iframe 可用性检测，
+           结果为 False 时直接触发恢复。
+        2. 兼容检测：若主动检测未触发恢复，再比较 _current_iframe_id 与
+           _task_iframe_id 是否一致（适用于 iframe ID 发生变化但主动检测未捕获的情况）。
+        注意：当 _task_iframe_id 存在时，步骤2之后的 iframe 可见性检测实际上
+        不会被执行（_is_on_task_page 已覆盖该场景），保留仅作为防御性代码。
 
         Args:
             category: 分类目录（如 "现货实时数据"）
@@ -389,6 +395,7 @@ class PageCrawler:
             need_recover = True
 
         # ── 兼容检测：iframe ID 发生变化 ──
+        # 适用于 _task_iframe_id 未记录（首次导航前）但 iframe 已切换的情况
         if not need_recover and self._task_iframe_id:
             if self._current_iframe_id != self._task_iframe_id:
                 logger.warning(
@@ -398,7 +405,9 @@ class PageCrawler:
                 )
                 need_recover = True
 
-        # ── 兼容检测：任务 iframe 不可见/不可用 ──
+        # ── 防御性检测：任务 iframe 不可见/不可用 ──
+        # 注意：当 _task_iframe_id 存在时，_is_on_task_page() 已覆盖此场景，
+        # 此处实际上不会被执行，保留作为防御性代码。
         if not need_recover and self._task_iframe_id:
             try:
                 target = self.page.query_selector(
@@ -497,7 +506,8 @@ class PageCrawler:
 
     def crawl_task(self, task_name: str, task_config: dict,
                     start_date: str, end_date: str,
-                    batch_queries: Optional[List[Tuple[str, str, str]]] = None):
+                    batch_queries: Optional[List[Tuple[str, str, str]]] = None,
+                    date_list: Optional[List[str]] = None):
         """
         执行单个爬取任务
 
@@ -507,6 +517,7 @@ class PageCrawler:
             start_date: 起始日期（YYYY-MM-DD）
             end_date: 结束日期（YYYY-MM-DD）
             batch_queries: 仅对「日前联络线计划」有效；若提供，则为 [(start, end, 联络线名称), ...]，按此列表执行指定日期+筛选条件，不遍历全部下拉选项。
+            date_list: 若提供，则仅爬取该列表中的日期，忽略 start_date/end_date 范围（用于补充缺失数据）。
         """
         if not task_config.get("enabled", True):
             logger.info("任务「%s」已禁用，跳过", task_name)
@@ -624,7 +635,10 @@ class PageCrawler:
                         "将通过导出按钮一次性导出所有数据", task_name)
 
         # 日期迭代
-        date_list = self._generate_date_list(start_date, end_date)
+        if date_list is None:
+            date_list = self._generate_date_list(start_date, end_date)
+        else:
+            logger.info("使用指定日期列表（共 %d 天），跳过增量检查", len(date_list))
         total_dates = len(date_list)
 
         for date_idx, date_str in enumerate(date_list):
@@ -659,8 +673,9 @@ class PageCrawler:
 
             logger.info("[%d/%d] 处理日期: %s", date_idx + 1, total_dates, date_str)
 
-            # ★ 先设置日期（export_all 或 无下拉选项的任务使用 quick_mode 跳过不必要的等待和面板关闭操作）
-            # 优化：对于没有下拉选项但有导出按钮的任务，也使用quick_mode，因为后续直接导出，不需要等待UI响应
+            # ★ 先设置日期（export_all 或 无下拉选项但有导出按钮的任务使用 quick_mode）
+            # quick_mode 跳过 _wait_for_filters_ready 和日期面板关闭操作（Tab/Escape/点击空白），
+            # 因为后续直接点击导出按钮，导出操作会自动关闭任何打开的面板，节省约 3 秒。
             use_quick_mode = export_all or (has_export and not has_dropdown)
             try:
                 self._ensure_content_frame()
@@ -1033,9 +1048,11 @@ class PageCrawler:
                     self._dropdown_cleared_for_none = True
                     time.sleep(0.3)
                 else:
-                    # ★ 后续清空：使用快速方法（直接 JS API 调用，~0.1s）
+                    # ★ 后续清空：使用快速方法（直接通过 FineReport JS API 调用，~0.1s）
+                    # 注意：此方法仅适用于 FineReport 页面；若快速清空失败，
+                    # 内部会自动回退到完整的 clear_dropdown_input 方法。
                     # set_date 可能触发 FineReport 参数联动刷新下拉框，
-                    # 因此仍需确保下拉框为空，但跳过不必要的页面检测和等待
+                    # 因此仍需确保下拉框为空。
                     self.filter_handler.quick_clear_fr_dropdown(dropdown_label)
             else:
                 self.filter_handler.select_dropdown_option(dropdown_label, dropdown_value)

@@ -21,6 +21,9 @@
     # 使用自定义配置文件
     python main.py --config my_config.yaml
 
+    # 从数据校验缺失文件批量补充下载
+    python main.py --loss-file ../data-verify/loss.txt
+
     # 仅验证已有数据质量
     python main.py --validate
 
@@ -40,7 +43,7 @@ from crawler.browser import BrowserManager
 from crawler.page_crawler import PageCrawler
 from storage.csv_storage import CsvStorage
 from utils.logger import setup_logger, get_logger
-from utils.parser import parse_tieline_batch_file
+from utils.parser import parse_loss_file
 from utils.validator import DataValidator, validate_csv_file
 
 
@@ -102,7 +105,7 @@ def get_enabled_tasks(config: dict, task_filter: str = None) -> dict:
 
 
 def run_crawler(config: dict, tasks: dict, start_date: str, end_date: str,
-                tieline_batch_queries=None):
+                loss_queries=None):
     """
     执行爬虫主流程
 
@@ -111,9 +114,8 @@ def run_crawler(config: dict, tasks: dict, start_date: str, end_date: str,
         tasks: 要执行的任务字典
         start_date: 起始日期
         end_date: 结束日期
-        tieline_batch_queries: 仅当任务含「日前联络线计划」时有效；
-            若不为 None，则为 [(start_date, end_date, 联络线名称), ...]，
-            该任务将按此列表执行批量查询，不再使用 start_date/end_date 与全部下拉选项。
+        loss_queries: 由 loss.txt 解析的缺失数据字典，格式为
+            {任务名称: [(日期, 通道名称或None), ...]}，用于补充下载缺失文件。
     """
     logger = get_logger()
     target_url = config.get("target_url", "https://pmos.sx.sgcc.com.cn/#/dashboard")
@@ -123,8 +125,9 @@ def run_crawler(config: dict, tasks: dict, start_date: str, end_date: str,
     logger.info("目标: %s", target_url)
     logger.info("日期: %s ~ %s", start_date, end_date)
     logger.info("任务: %d 个 (%s)", len(tasks), ", ".join(tasks.keys()))
-    if tieline_batch_queries:
-        logger.info("日前联络线计划: 使用批量查询文件，共 %d 条", len(tieline_batch_queries))
+    if loss_queries:
+        total_loss = sum(len(v) for v in loss_queries.values())
+        logger.info("缺失补充模式: 共 %d 个任务，%d 条记录", len(loss_queries), total_loss)
     logger.info("=" * 70)
 
     with BrowserManager(config) as browser:
@@ -148,14 +151,31 @@ def run_crawler(config: dict, tasks: dict, start_date: str, end_date: str,
         for task_name, task_config in tasks.items():
             try:
                 batch_queries = None
-                if task_name == "日前联络线计划" and tieline_batch_queries:
-                    batch_queries = tieline_batch_queries
+                task_date_list = None
+
+                if loss_queries and task_name in loss_queries:
+                    # 缺失补充模式：从 loss_queries 中提取该任务的查询参数
+                    entries = loss_queries[task_name]
+                    if task_name == "日前联络线计划":
+                        # 含通道名称：转为 batch_queries 格式
+                        batch_queries = [(d, d, ch) for d, ch in entries if ch]
+                        if not batch_queries:
+                            logger.warning("任务「%s」在 loss 文件中无有效通道记录，跳过", task_name)
+                            continue
+                    else:
+                        # 无通道名称：仅按日期列表爬取
+                        task_date_list = sorted(set(d for d, _ in entries))
+                        if not task_date_list:
+                            logger.warning("任务「%s」在 loss 文件中无有效日期记录，跳过", task_name)
+                            continue
+
                 page_crawler.crawl_task(
                     task_name=task_name,
                     task_config=task_config,
                     start_date=start_date,
                     end_date=end_date,
                     batch_queries=batch_queries,
+                    date_list=task_date_list,
                 )
             except KeyboardInterrupt:
                 logger.warning("用户中断，停止爬取")
@@ -250,7 +270,7 @@ def main():
   python main.py --task 日前备用总量           # 爬取指定任务
   python main.py --task "日前备用总量,断面约束" # 爬取多个任务
   python main.py --start 2025-06-01 --end 2025-06-30  # 指定日期范围
-  python main.py --task 日前联络线计划 --batch-file tieline_batch.txt  # 日前联络线计划按文件批量查询
+  python main.py --loss-file ../data-verify/loss.txt  # 从校验缺失文件批量补充下载
   python main.py --validate                   # 仅验证数据质量
   python main.py --schedule                   # 定时调度模式
   python main.py --list-tasks                 # 列出所有可用任务
@@ -271,8 +291,8 @@ def main():
                         help="以定时调度模式运行")
     parser.add_argument("--list-tasks", action="store_true",
                         help="列出所有可用任务")
-    parser.add_argument("--batch-file", default=None,
-                        help="日前联络线计划专用：从文件读取「日期+筛选条件」批量执行，每行 日期,联络线名称 或 开始日期,结束日期,联络线名称")
+    parser.add_argument("--loss-file", default=None,
+                        help="从数据校验生成的缺失文件列表（loss.txt）批量补充下载，格式：名称,日期[,通道名称]")
 
     args = parser.parse_args()
 
@@ -308,37 +328,47 @@ def main():
 
     start_date, end_date = get_date_range(config, args)
 
-    # 日前联络线计划：解析批量文件（仅当指定了该任务且提供了 --batch-file 时生效）
-    tieline_batch_queries = None
-    if args.batch_file:
-        if "日前联络线计划" not in tasks:
-            logger.warning("--batch-file 仅对任务「日前联络线计划」有效，当前未指定该任务，已忽略")
-        else:
-            if not os.path.isfile(args.batch_file):
-                logger.error("批量文件不存在: %s", args.batch_file)
-                sys.exit(1)
-            tieline_batch_queries = parse_tieline_batch_file(args.batch_file)
-            if not tieline_batch_queries:
-                logger.error("批量文件未解析出有效记录: %s", args.batch_file)
-                sys.exit(1)
-            logger.info("已从 %s 解析出 %d 条日前联络线计划查询", args.batch_file, len(tieline_batch_queries))
-
-    # 验证日期
-    try:
-        s = datetime.strptime(start_date, "%Y-%m-%d")
-        e = datetime.strptime(end_date, "%Y-%m-%d")
-        if s > e:
-            logger.error("起始日期 (%s) 不能晚于结束日期 (%s)", start_date, end_date)
+    # 缺失补充模式：解析 loss.txt，自动按任务分组批量下载
+    loss_queries = None
+    if args.loss_file:
+        if not os.path.isfile(args.loss_file):
+            logger.error("缺失文件不存在: %s", args.loss_file)
             sys.exit(1)
-    except ValueError as ve:
-        logger.error("日期格式错误: %s", ve)
-        sys.exit(1)
+        loss_queries = parse_loss_file(args.loss_file)
+        if not loss_queries:
+            logger.error("缺失文件未解析出有效记录: %s", args.loss_file)
+            sys.exit(1)
+        # 仅保留当前 tasks 中存在的任务
+        unknown = [t for t in loss_queries if t not in tasks]
+        if unknown:
+            logger.warning("loss 文件中以下任务在配置中不存在，将被忽略: %s", ", ".join(unknown))
+        loss_queries = {t: v for t, v in loss_queries.items() if t in tasks}
+        if not loss_queries:
+            logger.error("loss 文件中无可执行的任务（均不在配置中）")
+            sys.exit(1)
+        # 将 tasks 限定为 loss 文件中涉及的任务
+        tasks = {t: tasks[t] for t in loss_queries}
+        total_loss = sum(len(v) for v in loss_queries.values())
+        logger.info("已从 %s 解析出 %d 个任务，共 %d 条缺失记录", args.loss_file, len(loss_queries), total_loss)
+
+    # 验证日期（loss 模式下日期来自文件，跳过范围验证）
+    if not loss_queries:
+        try:
+            s = datetime.strptime(start_date, "%Y-%m-%d")
+            e = datetime.strptime(end_date, "%Y-%m-%d")
+            if s > e:
+                logger.error("起始日期 (%s) 不能晚于结束日期 (%s)", start_date, end_date)
+                sys.exit(1)
+        except ValueError as ve:
+            logger.error("日期格式错误: %s", ve)
+            sys.exit(1)
 
     # 执行
     if args.schedule:
         run_schedule(config, tasks, start_date, end_date)
     else:
-        run_crawler(config, tasks, start_date, end_date, tieline_batch_queries=tieline_batch_queries)
+        run_crawler(config, tasks, start_date, end_date,
+                    loss_queries=loss_queries)
 
 
 if __name__ == "__main__":
