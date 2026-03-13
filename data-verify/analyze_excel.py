@@ -5,10 +5,12 @@ Excel文件分析与数据校验系统
 
 功能：
 1. 从 config.yaml 加载校验配置
-2. 检查日期覆盖情况
-3. 校验文件名与表格内日期一致性
-4. 支持通道完整性校验（如日前联络线计划）
-5. 生成缺失文件报告和错误详细报告
+2. 扫描数据目录，按校验对象匹配文件
+3. 校验文件名中的日期与表格内容日期是否一致
+4. 校验文件名中的通道名与表格内容通道名是否一致
+5. 校验指定日期范围内文件数量是否完整（含通道缺失/重复检测）
+6. 对内容有误的文件执行删除，再统计真正缺失的文件
+7. 生成缺失文件报告（loss.txt）和错误详细报告（validation_errors.txt）
 
 作者：汉燧智能
 """
@@ -373,9 +375,9 @@ def _read_raw_channel_value(filepath: str, channel_keywords: list, max_rows: int
 
 
 def check_completeness(files: list, target_date: str, validator_cfg: dict) -> tuple[bool, dict]:
-    """检查指定日期的文件完整性（通道数量）
+    """检查指定日期的文件完整性（文件数量 / 通道覆盖）
 
-    files: 已发现的文件列表（由 discover_files 返回，已排除被删除的文件）
+    files: 已完成内容校验并清理后的剩余文件列表（由调用方传入 remaining_files）
     """
     standard_channels = validator_cfg.get('standard_channels', [])
     name_format = validator_cfg['file_pattern'].get('name_format', 'prefix_date')
@@ -586,7 +588,8 @@ _DELETABLE_ERROR_TYPES = {'date_mismatch', 'channel_mismatch', 'read_error'}
 def _should_delete(date_ok: bool, date_reason: dict | None,
                    channel_ok: bool, channel_reason: dict | None) -> bool:
     """判断文件是否应被删除：仅当存在实质性数据错误时才删除。
-    有表头但无数据（no_date_data / no_channel_header 等）视为内容通过，不删除。
+    实质性错误类型：date_mismatch / channel_mismatch / read_error。
+    有表头但无数据（no_date_data / no_date_header / no_channel_header 等）视为内容通过，不删除。
     """
     if not date_ok and date_reason and date_reason.get('type') in _DELETABLE_ERROR_TYPES:
         return True
