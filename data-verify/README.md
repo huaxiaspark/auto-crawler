@@ -37,12 +37,32 @@ global:
 **运行校验**
 
 ```bash
+# 使用 config.yaml 中的日期范围
 python analyze_excel.py
+
+# 通过命令行参数动态指定日期范围（覆盖 config.yaml）
+python analyze_excel.py --start 2025-01-01 --end 2025-01-31
+
+# 仅指定起始日期（结束日期沿用 config.yaml）
+python analyze_excel.py --start 2025-03-01
+
+# 指定自定义配置文件
+python analyze_excel.py --config /path/to/custom_config.yaml --start 2025-01-01 --end 2025-01-31
 ```
 
 校验完成后，结果输出到：
 - `loss.txt` — 缺失文件列表（日期 + 通道）
 - `validation_errors.txt` — 错误详细报告
+
+## 命令行参数
+
+| 参数 | 说明 | 示例 |
+|------|------|------|
+| `--start` | 校验起始日期，覆盖 config.yaml | `--start 2025-01-01` |
+| `--end` | 校验结束日期，覆盖 config.yaml | `--end 2025-01-31` |
+| `--config` | 自定义配置文件路径 | `--config /path/to/config.yaml` |
+
+命令行参数优先级高于 `config.yaml`，未传入的参数沿用配置文件中的值。
 
 ## 配置说明
 

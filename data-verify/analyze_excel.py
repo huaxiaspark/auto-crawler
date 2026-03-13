@@ -15,6 +15,7 @@ Excel文件分析与数据校验系统
 作者：汉燧智能
 """
 
+import argparse
 import os
 import re
 import warnings
@@ -705,8 +706,34 @@ def run_validator(validator_cfg: dict, cfg: dict, target_dates: list):
 
 def main(config_path: str = None):
     """主入口"""
+    parser = argparse.ArgumentParser(description='Excel文件数据校验系统')
+    parser.add_argument('--start', type=str, help='校验起始日期，格式 YYYY-MM-DD，覆盖 config.yaml 中的设置')
+    parser.add_argument('--end', type=str, help='校验结束日期，格式 YYYY-MM-DD，覆盖 config.yaml 中的设置')
+    parser.add_argument('--config', type=str, help='配置文件路径，默认使用脚本同目录下的 config.yaml')
+    args = parser.parse_args()
+
+    if args.config:
+        config_path = args.config
+
     cfg = load_config(config_path)
     g = cfg['global']
+
+    # 命令行参数覆盖 config.yaml 中的日期范围
+    if args.start:
+        try:
+            datetime.strptime(args.start, '%Y-%m-%d')
+        except ValueError:
+            print(f"❌ --start 日期格式错误: {args.start}，请使用 YYYY-MM-DD 格式")
+            return
+        g['date_range']['start'] = args.start
+
+    if args.end:
+        try:
+            datetime.strptime(args.end, '%Y-%m-%d')
+        except ValueError:
+            print(f"❌ --end 日期格式错误: {args.end}，请使用 YYYY-MM-DD 格式")
+            return
+        g['date_range']['end'] = args.end
 
     print("=" * 80)
     print("Excel文件数据校验系统")
