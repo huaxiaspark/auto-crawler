@@ -1,17 +1,17 @@
 server:
   host: "0.0.0.0"
-  port: 8080
+  port: 8301
   secret: "${CRAWLER_PROCESSOR_SERVER_SECRET}"
   jobs_file: "./processed_jobs.json"
   processing_timeout: 600
 
 storage:
   type: "minio"
-  endpoint: "http://minio-server:9000"
+  endpoint: "http://112.126.80.142:29000"
   access_key: "${CRAWLER_MINIO_ACCESS_KEY}"
   secret_key: "${CRAWLER_MINIO_SECRET_KEY}"
-  bucket: "sxpx-raw"
-  prefix: "data/"
+  bucket: "sxpx"
+  prefix: "raw/"
   secure: false
   local_cache_dir: "./cache"
 
@@ -23,17 +23,17 @@ processor:
 
 upload:
   type: "minio"
-  endpoint: "http://minio-server:9000"
+  endpoint: "http://112.126.80.142:29000"
   access_key: "${CRAWLER_MINIO_ACCESS_KEY}"
   secret_key: "${CRAWLER_MINIO_SECRET_KEY}"
-  bucket: "sxpx-output"
+  bucket: "sxpx"
   prefix: "output/"
   secure: false
 
 notify:
   platforms:
     - name: "platform-a"
-      enabled: true
+      enabled: false
       url: "https://api.platform-a.com/data/notify"
       token: "platform-a-token"
       retry_times: 5

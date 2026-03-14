@@ -18,14 +18,15 @@ services:
 
   # ── MinIO 对象存储 ────────────────────────────────────────────────────
   crawler-minio-service:
+    container_name: ${CONTAINER_PREFIX:-auto-crawler}-minio
     image: minio/minio:RELEASE.2025-05-24T17-08-30Z
     restart: always
     ports:
       - "29000:9000"
       - "29001:9001"
     environment:
-      - MINIO_ROOT_USER=admin
-      - MINIO_ROOT_PASSWORD=password123
+      - MINIO_ROOT_USER=${CRAWLER_MINIO_ACCESS_KEY}
+      - MINIO_ROOT_PASSWORD=${CRAWLER_MINIO_SECRET_KEY}
     volumes:
       - ./data/minio:/data:rw
     command: server /data --console-address ":9001"
@@ -40,6 +41,7 @@ services:
 
   # ── 采集服务（服务器 A）────────────────────────────────────────────────
   crawler-service:
+    container_name: ${CONTAINER_PREFIX:-auto-crawler}-crawler
     build:
       context: ./crawler-service
       dockerfile: Dockerfile
@@ -65,6 +67,7 @@ services:
 
   # ── 处理服务（服务器 B）────────────────────────────────────────────────
   crawler-processor-service:
+    container_name: ${CONTAINER_PREFIX:-auto-crawler}-processor
     build:
       context: ./processor-service
       dockerfile: Dockerfile
