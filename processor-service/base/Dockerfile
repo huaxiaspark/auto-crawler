@@ -1,7 +1,4 @@
-FROM --platform=$BUILDPLATFORM python:3.13-slim
-
-RUN apt-get update && apt-get install -y \
-    ca-certificates --no-install-recommends && rm -rf /var/lib/apt/lists/*
+FROM python:3.13-slim
 
 WORKDIR /app
 COPY requirements-base.txt .

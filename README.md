@@ -137,7 +137,7 @@ verify:
 
 upload:
   type: "minio"
-  endpoint: "http://minio-server:9000"
+  endpoint: "http://crawler-minio-service:9000"
   access_key: "${CRAWLER_MINIO_ACCESS_KEY}"
   secret_key: "${CRAWLER_MINIO_SECRET_KEY}"
   bucket: "sxpx-raw"
@@ -145,7 +145,7 @@ upload:
 
 notify:
   enabled: true
-  url: "http://processor-service:8080/api/trigger"
+  url: "http://crawler-processor-service:8301/api/trigger"
   secret: "${CRAWLER_NOTIFY_SECRET}"
   retry_times: 3
   retry_interval_seconds: 30
@@ -176,7 +176,7 @@ Content-Type: application/json
 
 {
   "object_name": "2025-01-13.tar.gz",
-  "download_url": "http://minio-server:9000/sxpx-raw/data/2025-01-13.tar.gz",
+  "download_url": "http://crawler-minio-service:9000/sxpx-raw/data/2025-01-13.tar.gz",
   "md5": "abc123...",
   "date_range": {"start": "2025-01-13", "end": "2025-01-13"},
   "categories": ["机组实际发电曲线", "日前联络线计划"],
@@ -191,14 +191,14 @@ Content-Type: application/json
 ```yaml
 server:
   host: "0.0.0.0"
-  port: 8080
+  port: 8301
   secret: "${CRAWLER_PROCESSOR_SERVER_SECRET}"
   jobs_file: "./processed_jobs.json"
   processing_timeout: 600
 
 storage:
   type: "minio"
-  endpoint: "http://minio-server:9000"
+  endpoint: "http://crawler-minio-service:9000"
   access_key: "${CRAWLER_MINIO_ACCESS_KEY}"
   secret_key: "${CRAWLER_MINIO_SECRET_KEY}"
   bucket: "sxpx-raw"
@@ -263,15 +263,16 @@ bash init.sh
 该脚本会创建以下目录和文件：
 
 ```
+data/minio/
 data/crawler/
 data/data-verify/loss.txt
 data/data-verify/validation_errors.txt
 data/post-process/data/
 data/post-process/output/
-data/processor-service/cache/
-data/processor-service/processed_jobs.json   # 内容为 {}
+data/crawler-processor-service/cache/
+data/crawler-processor-service/processed_jobs.json   # 内容为 {}
 logs/crawler-service/
-logs/processor-service/
+logs/crawler-processor-service/
 ```
 
 > `processed_jobs.json` 必须包含合法 JSON（`{}`），不可用 `touch` 创建空文件，否则服务启动时解析失败。`init.sh` 已处理此细节。
@@ -297,11 +298,11 @@ docker compose up -d
 ```bash
 # 查看日志
 docker compose logs -f crawler-service
-docker compose logs -f processor-service
+docker compose logs -f crawler-processor-service
 
 # 仅更新业务代码后重建并重启
 docker compose up -d --build crawler-service
-docker compose up -d --build processor-service
+docker compose up -d --build crawler-processor-service
 
 # 依赖变更后重建基础镜像
 docker compose --profile build-only build crawler-service-base
@@ -327,7 +328,7 @@ docker compose exec crawler-service python main.py \
 两个服务的日志均输出到控制台和滚动文件（单文件最大 10MB，保留 5 个备份），持久化到宿主机：
 
 - `logs/crawler-service/` → 容器内 `/app/crawler-service/logs/`
-- `logs/processor-service/` → 容器内 `/app/processor-service/logs/`
+- `logs/crawler-processor-service/` → 容器内 `/app/crawler-processor-service/logs/`
 
 日志格式：`%(asctime)s [%(levelname)s] %(name)s: %(message)s`
 
@@ -345,9 +346,15 @@ environment:
 
 ## 网络说明
 
-`crawler-service` 使用 `network_mode: host`，以便容器内进程访问宿主机 Chrome 的 CDP 端口（默认 9222）。因此该服务不使用 `ports` 映射，服务器 A 上的其他服务可直接通过 `localhost:8080` 访问 `processor-service`（若两个服务部署在同一台机器上）。
+所有服务均接入 `crawler-net` bridge 网络，服务间通过容器名互相访问。
 
-`processor-service` 暴露 `8080` 端口，接收服务器 A 的 HTTP 回调通知。
+| 服务 | 宿主机端口 | 容器端口 |
+|------|-----------|---------|
+| `crawler-minio-service` | 29000 / 29001 | 9000 / 9001 |
+| `crawler-service` | 28300 | 8300 |
+| `crawler-processor-service` | 28301 | 8301 |
+
+`crawler-service` 需要访问宿主机 Chrome 的 CDP 端口（默认 9222），请确保宿主机防火墙允许容器访问该端口，或在 `docker-compose.yml` 中为 `crawler-service` 添加 `extra_hosts: ["host-gateway:host-gateway"]`。
 
 ---
 
