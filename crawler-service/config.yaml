@@ -1,0 +1,36 @@
+schedule:
+  cron: "30 8 * * *"          # 定时日增模式触发时间，标准 5 字段 cron 表达式（分 时 日 月 周）
+  timezone: "Asia/Shanghai"
+  date_offset_days: -1        # 目标日期相对触发日期的偏移量（-1=昨天）
+
+crawler:
+  script_path: "../crawler/main.py"
+  config_path: "../crawler/config.yaml"
+  data_dir: "../crawler/data"
+  cleanup_after_upload: false  # 上传完成后是否清除 crawler/data/ 目录
+
+verify:
+  script_path: "../data-verify/analyze_excel.py"
+  config_path: "../data-verify/config.yaml"
+  loss_file: "../data-verify/loss.txt"
+  max_retry_rounds: 3
+  retry_interval_seconds: 30
+
+upload:
+  type: "minio"
+  endpoint: "http://minio-server:9000"
+  access_key: "${CRAWLER_MINIO_ACCESS_KEY}"
+  secret_key: "${CRAWLER_MINIO_SECRET_KEY}"
+  bucket: "sxpx-raw"
+  prefix: "data/"
+  secure: false
+
+notify:
+  enabled: true
+  type: "http"
+  url: "http://processor-service:8080/api/trigger"
+  secret: "${CRAWLER_NOTIFY_SECRET}"
+  retry_times: 3
+  retry_interval_seconds: 30
+
+log_dir: "./logs"

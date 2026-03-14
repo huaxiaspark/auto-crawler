@@ -1,0 +1,61 @@
+services:
+
+  # ── 采集服务基础镜像（仅用于构建，不运行）──────────────────────────────
+  crawler-service-base:
+    build:
+      context: ./crawler-service/base
+      dockerfile: Dockerfile
+    image: crawler-service-base:latest
+    profiles: ["build-only"]
+
+  # ── 处理服务基础镜像（仅用于构建，不运行）──────────────────────────────
+  processor-service-base:
+    build:
+      context: ./processor-service/base
+      dockerfile: Dockerfile
+    image: processor-service-base:latest
+    profiles: ["build-only"]
+
+  # ── 采集服务（服务器 A）────────────────────────────────────────────────
+  crawler-service:
+    build:
+      context: ./crawler-service
+      dockerfile: Dockerfile
+    image: crawler-service:latest
+    restart: always
+    network_mode: host
+    environment:
+      - CRAWLER_MINIO_ACCESS_KEY=${CRAWLER_MINIO_ACCESS_KEY}
+      - CRAWLER_MINIO_SECRET_KEY=${CRAWLER_MINIO_SECRET_KEY}
+      - CRAWLER_NOTIFY_SECRET=${CRAWLER_NOTIFY_SECRET}
+    volumes:
+      - ./crawler:/app/crawler:rw
+      - ./data-verify:/app/data-verify:rw
+      - ./crawler-service/config.yaml:/app/crawler-service/config.yaml:ro
+      - ./data/crawler:/app/crawler/data:rw
+      - ./data/data-verify/loss.txt:/app/data-verify/loss.txt:rw
+      - ./data/data-verify/validation_errors.txt:/app/data-verify/validation_errors.txt:rw
+      - ./logs/crawler-service:/app/crawler-service/logs:rw
+    depends_on: []
+
+  # ── 处理服务（服务器 B）────────────────────────────────────────────────
+  processor-service:
+    build:
+      context: ./processor-service
+      dockerfile: Dockerfile
+    image: processor-service:latest
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - CRAWLER_MINIO_ACCESS_KEY=${CRAWLER_MINIO_ACCESS_KEY}
+      - CRAWLER_MINIO_SECRET_KEY=${CRAWLER_MINIO_SECRET_KEY}
+      - CRAWLER_PROCESSOR_SERVER_SECRET=${CRAWLER_PROCESSOR_SERVER_SECRET}
+    volumes:
+      - ./post-process:/app/post-process:rw
+      - ./processor-service/config.yaml:/app/processor-service/config.yaml:ro
+      - ./data/post-process/data:/app/post-process/data:rw
+      - ./data/post-process/output:/app/post-process/output:rw
+      - ./data/processor-service/cache:/app/processor-service/cache:rw
+      - ./data/processor-service/processed_jobs.json:/app/processor-service/processed_jobs.json:rw
+      - ./logs/processor-service:/app/processor-service/logs:rw

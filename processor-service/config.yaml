@@ -1,0 +1,48 @@
+server:
+  host: "0.0.0.0"
+  port: 8080
+  secret: "${CRAWLER_PROCESSOR_SERVER_SECRET}"
+  jobs_file: "./processed_jobs.json"
+  processing_timeout: 600
+
+storage:
+  type: "minio"
+  endpoint: "http://minio-server:9000"
+  access_key: "${CRAWLER_MINIO_ACCESS_KEY}"
+  secret_key: "${CRAWLER_MINIO_SECRET_KEY}"
+  bucket: "sxpx-raw"
+  prefix: "data/"
+  secure: false
+  local_cache_dir: "./cache"
+
+processor:
+  script_path: "../post-process/batch_process_data.py"
+  data_dir: "../post-process/data"
+  output_dir: "../post-process/output"
+  cleanup_after_upload: true
+
+upload:
+  type: "minio"
+  endpoint: "http://minio-server:9000"
+  access_key: "${CRAWLER_MINIO_ACCESS_KEY}"
+  secret_key: "${CRAWLER_MINIO_SECRET_KEY}"
+  bucket: "sxpx-output"
+  prefix: "output/"
+  secure: false
+
+notify:
+  platforms:
+    - name: "platform-a"
+      enabled: true
+      url: "https://api.platform-a.com/data/notify"
+      token: "platform-a-token"
+      retry_times: 5
+      retry_interval_seconds: 30
+    - name: "platform-b"
+      enabled: false
+      url: "https://api.platform-b.com/webhook"
+      token: "platform-b-token"
+      retry_times: 5
+      retry_interval_seconds: 30
+
+log_dir: "./logs"
