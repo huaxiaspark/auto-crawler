@@ -48,6 +48,8 @@ services:
     pull_policy: never
     image: crawler-service:latest
     restart: always
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "28300:8300"
     environment:
