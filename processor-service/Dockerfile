@@ -1,11 +1,11 @@
-FROM processor-service-base:latest
+FROM crawler-processor-service-base:latest
 
-WORKDIR /app/processor-service
+WORKDIR /app/crawler-processor-service
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY main.py api.py processor_runner.py uploader.py platform_notifier.py config_loader.py logger.py ./
 
-RUN mkdir -p /app/processor-service/logs && chmod 777 /app/processor-service/logs
+RUN mkdir -p /app/crawler-processor-service/logs && chmod 777 /app/crawler-processor-service/logs
 
 CMD ["python", "main.py"]

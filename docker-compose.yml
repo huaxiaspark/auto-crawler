@@ -43,6 +43,7 @@ services:
     build:
       context: ./crawler-service
       dockerfile: Dockerfile
+    pull_policy: never
     image: crawler-service:latest
     restart: always
     ports:
@@ -67,6 +68,7 @@ services:
     build:
       context: ./processor-service
       dockerfile: Dockerfile
+    pull_policy: never
     image: crawler-processor-service:latest
     restart: always
     ports:
