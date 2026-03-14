@@ -5,3 +5,5 @@
 **/*.png
 **/*_files
 **/*.html
+data-verify/loss.txt
+data-verify/validation_errors.txt
