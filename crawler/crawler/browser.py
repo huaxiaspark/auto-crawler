@@ -12,7 +12,10 @@
 """
 
 import os
+import urllib.request
+import json
 from typing import Optional
+from urllib.parse import urlparse, urlunparse
 
 from playwright.sync_api import Browser, BrowserContext, Page, Playwright, sync_playwright
 
@@ -69,7 +72,21 @@ class BrowserManager:
 
         self._playwright = sync_playwright().start()
         try:
-            self._browser = self._playwright.chromium.connect_over_cdp(self.cdp_url)
+            # Chrome 以 --remote-debugging-address=0.0.0.0 启动时，
+            # /json/version 返回的 webSocketDebuggerUrl 主机为 0.0.0.0，
+            # 容器内无法连接。需手动获取并替换为实际可达的主机。
+            cdp_host = urlparse(self.cdp_url).netloc  # e.g. host.docker.internal:9222
+            version_url = f"{self.cdp_url.rstrip('/')}/json/version"
+            with urllib.request.urlopen(version_url, timeout=10) as resp:
+                info = json.loads(resp.read())
+            ws_url = info.get("webSocketDebuggerUrl", "")
+            if ws_url:
+                parsed = urlparse(ws_url)
+                ws_url = urlunparse(parsed._replace(netloc=cdp_host))
+                logger.debug("使用修正后的 WebSocket URL: %s", ws_url)
+                self._browser = self._playwright.chromium.connect_over_cdp(ws_url)
+            else:
+                self._browser = self._playwright.chromium.connect_over_cdp(self.cdp_url)
         except Exception as e:
             logger.error(
                 "无法连接到 Chrome，请确认：\n"
