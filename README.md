@@ -65,7 +65,7 @@ auto-crawler/
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-两个服务均通过 MinIO 对象存储传递数据：服务器 A 将原始爬取数据打包上传至 `sxpx-raw` bucket，通知服务器 B 后，服务器 B 下载、转换，再将宽表结果上传至 `sxpx-output` bucket。
+两个服务均通过 MinIO 对象存储传递数据：服务器 A 将原始爬取数据打包上传至 `sxpx` bucket，通知服务器 B 后，服务器 B 下载、转换，再将宽表结果上传至 `sxpx` bucket。
 
 ---
 
@@ -140,8 +140,8 @@ upload:
   endpoint: "http://crawler-minio-service:9000"
   access_key: "${CRAWLER_MINIO_ACCESS_KEY}"
   secret_key: "${CRAWLER_MINIO_SECRET_KEY}"
-  bucket: "sxpx-raw"
-  prefix: "data/"
+  bucket: "sxpx"
+  prefix: "raw/"
 
 notify:
   enabled: true
@@ -160,7 +160,7 @@ notify:
 ```
 Step 1  接收 HTTP 触发信号（POST /api/trigger），立即返回 202，后台异步处理
 Step 2  从 MinIO 下载 tar 包 → MD5 校验 → 解压 → 数据转换
-Step 3  打包转换结果 → 上传 MinIO（sxpx-output bucket）
+Step 3  打包转换结果 → 上传 MinIO（sxpx bucket）
 Step 4  通知三方平台
 ```
 
@@ -176,7 +176,7 @@ Content-Type: application/json
 
 {
   "object_name": "2025-01-13.tar.gz",
-  "download_url": "http://crawler-minio-service:9000/sxpx-raw/data/2025-01-13.tar.gz",
+  "download_url": "http://crawler-minio-service:9000/sxpx/raw/2025-01-13.tar.gz",
   "md5": "abc123...",
   "date_range": {"start": "2025-01-13", "end": "2025-01-13"},
   "categories": ["机组实际发电曲线", "日前联络线计划"],
@@ -201,8 +201,8 @@ storage:
   endpoint: "http://crawler-minio-service:9000"
   access_key: "${CRAWLER_MINIO_ACCESS_KEY}"
   secret_key: "${CRAWLER_MINIO_SECRET_KEY}"
-  bucket: "sxpx-raw"
-  prefix: "data/"
+  bucket: "sxpx"
+  prefix: "raw/"
   local_cache_dir: "./cache"
 
 processor:
@@ -213,7 +213,7 @@ processor:
 
 upload:
   type: "minio"
-  bucket: "sxpx-output"
+  bucket: "sxpx"
   prefix: "output/"
 
 notify:
