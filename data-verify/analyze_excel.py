@@ -428,7 +428,13 @@ def _output_path(cfg: dict, filename: str) -> str:
     out_dir = cfg['global'].get('output_directory')
     if not out_dir:
         out_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(out_dir, filename)
+    path = os.path.join(out_dir, filename)
+    if os.path.isdir(path):
+        raise IsADirectoryError(
+            f"输出路径 '{path}' 是一个目录而非文件，请手动删除该目录后重试：\n"
+            f"  rm -rf \"{path}\""
+        )
+    return path
 
 
 def write_missing_report(cfg: dict, missing_files: list) -> str:
