@@ -452,13 +452,20 @@ def write_missing_report(cfg: dict, missing_files: list) -> str:
     with open(path, 'w', encoding='utf-8') as f:
         f.write("# 缺失文件列表\n")
         f.write(f"# 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write("# 格式: 名称,日期,通道名称\n\n")
-        for item in sorted(missing_files, key=lambda x: (x.get('name', ''), x['date'], x['channel'] or '')):
-            name = item.get('name', '')
-            ch = item['channel'] or ''
-            parts = [p for p in [name, item['date'], ch] if p]
-            f.write(','.join(parts) + '\n')
-    print(f"✅ 缺失文件列表已保存至: {path}")
+        f.write("# 格式: 名称,日期,通道名称\n")
+        if not missing_files:
+            f.write("# 无缺失文件，所有数据完整\n")
+        else:
+            f.write("\n")
+            for item in sorted(missing_files, key=lambda x: (x.get('name', ''), x['date'], x['channel'] or '')):
+                name = item.get('name', '')
+                ch = item['channel'] or ''
+                parts = [p for p in [name, item['date'], ch] if p]
+                f.write(','.join(parts) + '\n')
+    if missing_files:
+        print(f"⚠️  缺失文件列表已保存至: {path}（共 {len(missing_files)} 个）")
+    else:
+        print(f"✅ 无缺失文件，报告已保存至: {path}")
     return path
 
 
@@ -530,7 +537,7 @@ def write_errors_report(cfg: dict, all_validator_errors: list) -> str:
                 for e in date_errors:
                     _write_error_entry(f, e, 'date')
             else:
-                f.write("✅ 无日期校验错误\n")
+                f.write("无日期校验错误\n")
 
             f.write("\n" + "-" * 80 + "\n二、通道校验错误\n" + "-" * 80 + "\n\n")
             if channel_errors:
@@ -538,7 +545,7 @@ def write_errors_report(cfg: dict, all_validator_errors: list) -> str:
                 for e in channel_errors:
                     _write_error_entry(f, e, 'channel')
             else:
-                f.write("✅ 无通道校验错误\n")
+                f.write("无通道校验错误\n")
 
             date_only = sum(1 for e in filtered if not e.get('date_ok') and e.get('channel_ok'))
             ch_only = sum(1 for e in filtered if e.get('date_ok') and not e.get('channel_ok'))
@@ -550,7 +557,10 @@ def write_errors_report(cfg: dict, all_validator_errors: list) -> str:
         f.write(f"通道错误合计: {total_ch_errors} 个\n")
         f.write(f"\n报告生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
-    print(f"✅ 校验错误报告已保存至: {path}")
+    if total_date_errors or total_ch_errors:
+        print(f"⚠️  校验错误报告已保存至: {path}（日期错误: {total_date_errors}，通道错误: {total_ch_errors}）")
+    else:
+        print(f"✅ 无内容校验错误，报告已保存至: {path}")
     return path
 
 
@@ -778,19 +788,31 @@ def main(config_path: str = None):
                 'filters': summary['filters'],
             })
 
-    if all_missing:
-        write_missing_report(cfg, all_missing)
+    write_missing_report(cfg, all_missing)
+    write_errors_report(cfg, all_validator_errors)
 
-    if all_validator_errors:
-        write_errors_report(cfg, all_validator_errors)
+    total_missing = sum(s['missing_count'] for s in summaries)
+    total_errors = sum(s['filtered_error_count'] for s in summaries)
+    total_deleted = sum(s['deleted_count'] for s in summaries)
 
     print("\n" + "=" * 80)
     print("校验汇总")
     print("=" * 80)
     for s in summaries:
-        print(f"[{s['name']}] 文件: {s['total_files']}  删除: {s['deleted_count']}  缺失: {s['missing_count']}  错误: {s['filtered_error_count']}（含已过滤: {s['error_count']}）")
+        status = "✅" if s['missing_count'] == 0 and s['filtered_error_count'] == 0 else "❌"
+        print(f"{status} [{s['name']}] 文件: {s['total_files']}  删除: {s['deleted_count']}  缺失: {s['missing_count']}  错误: {s['filtered_error_count']}（含已过滤: {s['error_count']}）")
     print("=" * 80)
-    print("校验完成！")
+    if total_missing == 0 and total_errors == 0 and total_deleted == 0:
+        print("✅ 所有校验通过，数据完整无误！")
+    else:
+        parts = []
+        if total_deleted:
+            parts.append(f"删除问题文件 {total_deleted} 个")
+        if total_missing:
+            parts.append(f"缺失文件 {total_missing} 个")
+        if total_errors:
+            parts.append(f"内容错误 {total_errors} 个")
+        print(f"❌ 校验完成，发现问题：{' / '.join(parts)}")
 
 
 if __name__ == "__main__":
