@@ -128,7 +128,7 @@ def run(config: dict, start: str, end: str, tasks: list = None):
 
     # Step 4: 打包上传
     data_dir = os.path.abspath(config["crawler"]["data_dir"])
-    object_name = f"{start}.tar.gz"
+    object_name = f"{start}-{end}.tar.gz" if start != end else f"{start}.tar.gz"
     upload_start = datetime.now()
 
     try:
