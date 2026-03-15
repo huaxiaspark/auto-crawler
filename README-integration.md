@@ -1,6 +1,6 @@
 # 数据处理流程接入说明
 
-本文档说明如何通过 curl 命令手动触发完整数据处理流程，以及各环节的验证方法。适用于真实第三方系统接入和本地联调验证。
+本文档说明如何通过命令行手动触发完整数据处理流程，以及各环节的验证方法。适用于真实第三方系统接入和本地联调验证。
 
 ---
 
@@ -11,18 +11,19 @@
 | crawler-service | auto-crawler-crawler | 28300 |
 | processor-service | auto-crawler-processor | 28301 |
 | mock-notify-receiver | auto-crawler-mock-notify-receiver | 28401 |
-| MinIO | auto-crawler-minio（远程） | 29000 |
+| MinIO | 远程部署（112.126.80.142） | 29000 |
 
 ---
 
 ## 完整流程说明
 
 ```
-crawler/data/（已爬取数据）
+crawler/data/（已爬取数据，含子目录 exports/ 和 现货出清结果/）
+    ↓ flatten_and_classify（整理文件结构）
     ↓ 打包上传
 MinIO: sxpx/raw/{date}.tar.gz
-    ↓ POST /api/trigger
-processor-service（下载 → 数据转换 → 打包上传）
+    ↓ POST /api/trigger（X-Secret 鉴权）
+processor-service（下载 → MD5 校验 → 数据转换 → 打包上传）
     ↓
 MinIO: sxpx/output/{date}.tar.gz
     ↓ POST /data/notify  +  POST /webhook
@@ -31,21 +32,34 @@ mock-notify-receiver（或真实三方平台）
 
 ---
 
+## Step 0：数据校验（可选，建议在上传前执行）
+
+爬取完成后，先对 `crawler/data/` 中的数据执行校验，确认文件完整性和内容一致性：
+
+```bash
+cd data-verify
+source venv/bin/activate
+python3 analyze_excel.py --start 2025-01-01 --end 2025-01-01
+```
+
+校验结果：
+- 无缺失文件：`loss.txt` 为空或不存在，可直接进入上传步骤
+- 有缺失文件：`loss.txt` 中列出缺失条目，需补爬后重新校验
+
+校验报告输出至：
+- `data-verify/loss.txt` — 缺失文件列表（仅在有缺失时写入）
+- `data-verify/validation_errors.txt` — 内容一致性错误详情
+
+---
+
 ## Step 1：打包上传原始数据到 MinIO
 
 此步骤由 `crawler-service` 自动完成，也可手动执行（在 `crawler-service/` 目录下）：
 
 ```bash
-# 进入 crawler-service 目录
 cd crawler-service
-
-# 激活 venv
 source venv/bin/activate
-
-# 执行打包上传（需设置环境变量）
-export CRAWLER_MINIO_ACCESS_KEY=admin
-export CRAWLER_MINIO_SECRET_KEY=password123
-export CRAWLER_NOTIFY_SECRET=secret
+export $(cat ../.env | xargs)
 
 python3 -c "
 import os, sys, logging
@@ -74,6 +88,11 @@ uploader.write_manifest(
 print(f'md5={md5} size={size_bytes}')
 "
 ```
+
+**说明：**
+- `_flatten_and_classify` 会先将 `exports/`、`现货出清结果/` 等子目录中的文件展平到根目录，再按任务名重新归类
+- 上传目标：`sxpx/raw/{date}.tar.gz`
+- 上传清单写入：`crawler-service/logs/upload_manifest_{timestamp}.json`
 
 记录输出的 `md5` 值，后续步骤需要用到。
 
@@ -113,11 +132,11 @@ HTTP 状态码 409，表示该任务已处理，无需重复触发。
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | object_name | string | MinIO 中的文件名，格式 `{date}.tar.gz` |
-| download_url | string | 完整下载地址（processor 内部会忽略此字段，直接从 MinIO 下载） |
+| download_url | string | 完整下载地址（processor 内部忽略此字段，直接从 MinIO 下载） |
 | md5 | string | 原始包的 MD5，用于完整性校验 |
 | date_range.start | string | 数据起始日期，格式 `YYYY-MM-DD` |
 | date_range.end | string | 数据结束日期，格式 `YYYY-MM-DD` |
-| categories | array | 任务名列表，与 `crawler/config.yaml` 中的任务名一致，如 `["抽蓄电站水位", "断面约束", "机组实际发电曲线"]`，透传给三方通知 |
+| categories | array | 任务名列表，透传给三方通知，如 `["抽蓄电站水位", "断面约束", "机组实际发电曲线"]` |
 | timestamp | string | 触发时间戳（ISO 8601） |
 
 ---
@@ -127,7 +146,6 @@ HTTP 状态码 409，表示该任务已处理，无需重复触发。
 processor-service 处理为异步，触发后可通过日志确认完成：
 
 ```bash
-# 查看 processor 实时日志
 docker logs auto-crawler-processor --tail 50 -f
 ```
 
@@ -153,21 +171,21 @@ curl http://localhost:28401/records
   "total": 2,
   "records": [
     {
-      "received_at": "2025-01-01T08:00:05.879554",
+      "received_at": "2026-03-15T02:58:05.879554",
       "endpoint": "/data/notify",
       "categories": ["实时市场出清概况", "日前市场出清概况", "抽蓄电站水位", "断面约束", "机组实际发电曲线"],
       "date_range": {"start": "2025-01-01", "end": "2025-01-01"},
       "object_name": "2025-01-01.tar.gz",
-      "md5": "<output包的md5>",
+      "md5": "176b87546574fc271a75bb4ea87ae755",
       "download_url": "http://112.126.80.142:29000/sxpx/output/2025-01-01.tar.gz"
     },
     {
-      "received_at": "2025-01-01T08:00:05.889549",
+      "received_at": "2026-03-15T02:58:05.889549",
       "endpoint": "/webhook",
       "categories": ["实时市场出清概况", "日前市场出清概况", "抽蓄电站水位", "断面约束", "机组实际发电曲线"],
       "date_range": {"start": "2025-01-01", "end": "2025-01-01"},
       "object_name": "2025-01-01.tar.gz",
-      "md5": "<output包的md5>",
+      "md5": "176b87546574fc271a75bb4ea87ae755",
       "download_url": "http://112.126.80.142:29000/sxpx/output/2025-01-01.tar.gz"
     }
   ]
@@ -246,12 +264,14 @@ docker compose restart crawler-processor-service
 
 **Q: 如何确认文件已上传到 MinIO？**
 
+MinIO 部署在远程服务器，通过 processor 日志确认上传结果：
 ```bash
-# 查看 raw 目录
-docker exec auto-crawler-minio mc ls local/sxpx/raw/
+docker logs auto-crawler-processor --tail 50
+```
 
-# 查看 output 目录
-docker exec auto-crawler-minio mc ls local/sxpx/output/
+日志中会出现：
+```
+[INFO] uploader: [Step 3] 上传完成，object=output/2025-01-01.tar.gz，md5=...，size=... bytes
 ```
 
 **Q: processor 处理失败如何排查？**
@@ -261,3 +281,14 @@ docker logs auto-crawler-processor --tail 100
 ```
 
 查看 `[ERROR]` 行定位问题。
+
+**Q: 数据校验发现缺失文件怎么办？**
+
+查看 `data-verify/loss.txt` 中的缺失条目，使用爬虫补爬后重新执行校验：
+```bash
+cd data-verify
+source venv/bin/activate
+python3 analyze_excel.py --start 2025-01-01 --end 2025-01-01
+```
+
+确认 `loss.txt` 为空后再执行上传步骤。
