@@ -18,7 +18,7 @@ services:
 
   # ── MinIO 对象存储 ────────────────────────────────────────────────────
   crawler-minio-service:
-    container_name: ${CONTAINER_PREFIX:-auto-crawler}-minio
+    container_name: ${CRAWLER_CONTAINER_PREFIX:-auto-crawler}-minio
     image: minio/minio:RELEASE.2025-05-24T17-08-30Z
     restart: always
     ports:
@@ -41,7 +41,7 @@ services:
 
   # ── 采集服务（服务器 A）────────────────────────────────────────────────
   crawler-service:
-    container_name: ${CONTAINER_PREFIX:-auto-crawler}-crawler
+    container_name: ${CRAWLER_CONTAINER_PREFIX:-auto-crawler}-crawler
     build:
       context: ./crawler-service
       dockerfile: Dockerfile
@@ -69,7 +69,7 @@ services:
 
   # ── 处理服务（服务器 B）────────────────────────────────────────────────
   crawler-processor-service:
-    container_name: ${CONTAINER_PREFIX:-auto-crawler}-processor
+    container_name: ${CRAWLER_CONTAINER_PREFIX:-auto-crawler}-processor
     build:
       context: ./processor-service
       dockerfile: Dockerfile
@@ -95,7 +95,7 @@ services:
   
   # ── 模拟通知接收服务（本地测试用）────────────────────────────────────────
   mock-notify-receiver:
-    container_name: ${CONTAINER_PREFIX:-auto-crawler}-mock-notify-receiver
+    container_name: ${CRAWLER_CONTAINER_PREFIX:-auto-crawler}-mock-notify-receiver
     build:
       context: ./mock-notify-receiver
       dockerfile: Dockerfile

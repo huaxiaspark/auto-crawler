@@ -323,6 +323,229 @@ docker compose exec crawler-service python main.py \
 
 ---
 
+## 直接部署（不使用容器）
+
+适用于无法使用 Docker 的目标服务器，直接在宿主机上运行两个服务。
+
+### 前置条件
+
+- Python 3.11+
+- Chrome 浏览器已安装并以 CDP 模式运行（仅服务器 A 需要）
+- MinIO 服务可访问
+- 两台服务器均已克隆本仓库到相同路径（或按实际路径修改 `config.yaml`）
+
+### 服务器 A：采集服务（crawler-service）
+
+**1. 创建并激活虚拟环境**
+
+```bash
+cd auto-crawler/crawler-service
+python3 -m venv venv
+source venv/bin/activate
+```
+
+**2. 安装依赖**
+
+```bash
+# 安装 crawler-service 自身依赖
+pip install -r requirements.txt
+
+# 安装爬虫脚本依赖
+pip install -r ../crawler/requirements.txt
+
+# 安装校验脚本依赖
+pip install -r ../data-verify/requirements.txt
+
+# 安装 Playwright 浏览器驱动
+playwright install chromium
+```
+
+> 若服务器无法访问外网，可在有网络的机器上执行 `pip download` 打包后离线安装。
+
+**3. 安装系统依赖（Chromium 运行时库）**
+
+```bash
+# Debian / Ubuntu
+sudo apt-get install -y libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 \
+  libcups2 libdrm2 libdbus-1-3 libxkbcommon0 libxcomposite1 libxdamage1 \
+  libxfixes3 libxrandr2 libgbm1 libasound2 libpango-1.0-0 libcairo2 \
+  fonts-unifont fonts-noto-color-emoji
+
+# CentOS / RHEL（包名略有差异）
+sudo yum install -y nss nspr atk at-spi2-atk cups-libs libdrm dbus-libs \
+  libxkbcommon libXcomposite libXdamage libXfixes libXrandr mesa-libgbm \
+  alsa-lib pango cairo
+```
+
+**4. 配置环境变量**
+
+```bash
+export CRAWLER_MINIO_ACCESS_KEY=your-access-key
+export CRAWLER_MINIO_SECRET_KEY=your-secret-key
+export CRAWLER_NOTIFY_SECRET=your-notify-secret
+# 可选，默认 INFO
+export LOG_LEVEL=INFO
+```
+
+建议写入 `~/.bashrc` 或 `~/.zshrc` 使其持久化，或创建 `.env` 文件后在启动脚本中 `source` 它。
+
+**5. 修改 `config.yaml`**
+
+将服务间地址从容器名改为实际 IP/域名：
+
+```yaml
+upload:
+  endpoint: "http://<minio服务器IP>:29000"   # MinIO 实际地址
+
+notify:
+  url: "http://<服务器B的IP>:28301/api/trigger"  # 服务器 B 实际地址
+```
+
+**6. 创建必要目录**
+
+```bash
+mkdir -p logs
+mkdir -p ../crawler/data
+mkdir -p ../data-verify
+touch ../data-verify/loss.txt
+touch ../data-verify/validation_errors.txt
+```
+
+**7. 启动服务**
+
+定时模式（后台运行）：
+
+```bash
+nohup python main.py --mode scheduled > logs/stdout.log 2>&1 &
+echo $! > crawler-service.pid
+```
+
+手动批量模式：
+
+```bash
+python main.py --mode batch --start 2025-01-01 --end 2025-01-31
+python main.py --mode batch --start 2025-01-01 --end 2025-01-31 --task 日前备用总量,断面约束
+```
+
+**8. 停止服务**
+
+```bash
+kill $(cat crawler-service.pid)
+```
+
+---
+
+### 服务器 B：处理服务（processor-service）
+
+**1. 创建并激活虚拟环境**
+
+```bash
+cd auto-crawler/processor-service
+python3 -m venv venv
+source venv/bin/activate
+```
+
+**2. 安装依赖**
+
+```bash
+pip install -r requirements.txt
+pip install -r ../post-process/requirements.txt
+```
+
+**3. 配置环境变量**
+
+```bash
+export CRAWLER_MINIO_ACCESS_KEY=your-access-key
+export CRAWLER_MINIO_SECRET_KEY=your-secret-key
+export CRAWLER_PROCESSOR_SERVER_SECRET=your-server-secret
+export LOG_LEVEL=INFO
+```
+
+**4. 修改 `config.yaml`**
+
+```yaml
+server:
+  host: "0.0.0.0"
+  port: 8301
+
+storage:
+  endpoint: "http://<minio服务器IP>:29000"   # MinIO 实际地址
+```
+
+**5. 创建必要目录和文件**
+
+```bash
+mkdir -p logs cache
+mkdir -p ../post-process/data ../post-process/output
+echo '{}' > processed_jobs.json   # 必须是合法 JSON，不可用 touch 创建空文件
+```
+
+**6. 启动服务**
+
+```bash
+nohup python main.py > logs/stdout.log 2>&1 &
+echo $! > processor-service.pid
+```
+
+**7. 停止服务**
+
+```bash
+kill $(cat processor-service.pid)
+```
+
+---
+
+### 使用 systemd 管理进程（推荐）
+
+相比 `nohup`，systemd 可在服务崩溃或服务器重启后自动拉起进程。
+
+以采集服务为例，创建 `/etc/systemd/system/crawler-service.service`：
+
+```ini
+[Unit]
+Description=Auto Crawler Service
+After=network.target
+
+[Service]
+Type=simple
+User=<运行用户>
+WorkingDirectory=/path/to/auto-crawler/crawler-service
+Environment=CRAWLER_MINIO_ACCESS_KEY=your-access-key
+Environment=CRAWLER_MINIO_SECRET_KEY=your-secret-key
+Environment=CRAWLER_NOTIFY_SECRET=your-notify-secret
+ExecStart=/path/to/auto-crawler/crawler-service/venv/bin/python main.py --mode scheduled
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/path/to/auto-crawler/crawler-service/logs/stdout.log
+StandardError=append:/path/to/auto-crawler/crawler-service/logs/stderr.log
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable crawler-service
+sudo systemctl start crawler-service
+sudo systemctl status crawler-service
+```
+
+处理服务（processor-service）按同样方式创建对应的 `.service` 文件，`ExecStart` 改为 `python main.py` 即可。
+
+---
+
+### 查看日志
+
+```bash
+# 实时跟踪滚动日志文件
+tail -f auto-crawler/crawler-service/logs/crawler-service.log
+
+# 若使用 systemd
+journalctl -u crawler-service -f
+```
+
+---
+
 ## 日志
 
 两个服务的日志均输出到控制台和滚动文件（单文件最大 10MB，保留 5 个备份），持久化到宿主机：
