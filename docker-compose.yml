@@ -92,6 +92,24 @@ services:
       - ./logs/crawler-processor-service:/app/crawler-processor-service/logs:rw
     networks:
       - crawler-net
+  
+  # ── 模拟通知接收服务（本地测试用）────────────────────────────────────────
+  mock-notify-receiver:
+    container_name: ${CONTAINER_PREFIX:-auto-crawler}-mock-notify-receiver
+    build:
+      context: ./mock-notify-receiver
+      dockerfile: Dockerfile
+    image: mock-notify-receiver:latest
+    restart: always
+    ports:
+      - "28401:8401"
+    environment:
+      - MOCK_NOTIFY_SECRET=${MOCK_NOTIFY_SECRET:-}
+    volumes:
+      - ./mock-notify-receiver/config.yaml:/app/config.yaml:ro
+      - ./logs/mock-notify-receiver:/app/logs:rw
+    networks:
+      - crawler-net
 
 networks:
   crawler-net:

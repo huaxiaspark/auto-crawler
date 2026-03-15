@@ -44,5 +44,17 @@ notify:
       token: "platform-b-token"
       retry_times: 5
       retry_interval_seconds: 30
+    - name: "mock-receiver-notify"
+      enabled: true
+      url: "http://mock-notify-receiver:8401/data/notify"
+      token: ""
+      retry_times: 3
+      retry_interval_seconds: 5
+    - name: "mock-receiver-webhook"
+      enabled: true
+      url: "http://mock-notify-receiver:8401/webhook"
+      token: ""
+      retry_times: 3
+      retry_interval_seconds: 5
 
 log_dir: "./logs"
