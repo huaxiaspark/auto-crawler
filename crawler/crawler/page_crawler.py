@@ -1074,9 +1074,22 @@ class PageCrawler:
                 logger.info("通过导出获取数据成功: %s", filepath)
                 return
 
+            # 导出失败时，检测是否已被刷新回首页
+            # 若是，抛出异常让外层 _crawl_single 重试并触发 _recover_navigation
+            if not self._is_on_task_page():
+                raise RuntimeError(
+                    f"导出失败且检测到页面已回到首页，触发重新导航 [{task_name}][{date_str}]"
+                )
+
             logger.info("导出不可用，回退到表格解析")
 
         # 5. 从表格提取数据
+        # 进入表格提取前，先确认仍在任务页面（防止页面已刷新回首页）
+        if not self._is_on_task_page():
+            raise RuntimeError(
+                f"进入表格提取前检测到页面已回到首页，触发重新导航 [{task_name}][{date_str}]"
+            )
+
         all_data = []
 
         if has_pagination:
@@ -1089,6 +1102,11 @@ class PageCrawler:
             all_data = rows
 
         if not all_data:
+            # 提取到 0 行时，检测是否已回到首页（首页表格也会返回 0 行）
+            if not self._is_on_task_page():
+                raise RuntimeError(
+                    f"表格提取结果为空且检测到页面已回到首页，触发重新导航 [{task_name}][{date_str}]"
+                )
             logger.warning("未提取到数据 [%s][%s][%s]", task_name, date_str,
                            dropdown_value or "(不选)")
             return
