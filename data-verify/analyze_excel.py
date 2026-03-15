@@ -256,6 +256,16 @@ def check_date_consistency(file_info: dict, cfg: dict) -> tuple:
     for df in frames:
         # 找出所有日期列（表头含日期关键词的列）
         date_cols = [col for col in df.columns if any(kw in str(col).strip() for kw in date_keywords)]
+
+        # CSV 用 header=None 读取时列名为整数，需额外扫描单元格内容定位日期列
+        if not date_cols and file_info['file_type'] == 'csv':
+            for col in df.columns:
+                for row_idx in range(len(df)):
+                    cell = str(df.iloc[row_idx][col]).strip()
+                    if any(kw in cell for kw in date_keywords):
+                        date_cols.append(col)
+                        break
+
         if not date_cols:
             continue
 
