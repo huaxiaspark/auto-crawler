@@ -127,7 +127,7 @@ crawler:
   script_path: "../crawler/main.py"
   config_path: "../crawler/config.yaml"
   data_dir: "../crawler/data"
-  cleanup_after_upload: false  # 上传后是否清除 crawler/data/
+  cleanup_after_upload: true  # 上传后是否清除 crawler/data/
 
 verify:
   script_path: "../data-verify/analyze_excel.py"

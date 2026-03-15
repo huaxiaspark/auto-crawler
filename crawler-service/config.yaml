@@ -1,5 +1,5 @@
 schedule:
-  cron: "31 18 * * *"          # 定时日增模式触发时间，标准 5 字段 cron 表达式（分 时 日 月 周）
+  cron: "25 7 * * *"          # 定时日增模式触发时间，标准 5 字段 cron 表达式（分 时 日 月 周）
   timezone: "Asia/Shanghai"
   date_offset_days: -68       # 目标日期相对触发日期的偏移量（-1=昨天）
 
@@ -7,7 +7,7 @@ crawler:
   script_path: "../crawler/main.py"
   config_path: "../crawler/config.yaml"
   data_dir: "../crawler/data"
-  cleanup_after_upload: false  # 上传完成后是否清除 crawler/data/ 目录
+  cleanup_after_upload: true  # 上传完成后是否清除 crawler/data/ 目录
 
 verify:
   script_path: "../data-verify/analyze_excel.py"
