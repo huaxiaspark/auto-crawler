@@ -295,13 +295,16 @@ class Navigator:
         """
         try:
             self._click_tree_leaf(subcategory, timeout=15000)
-            time.sleep(2)
-            self.page.wait_for_load_state("networkidle", timeout=15000)
-            logger.info("已导航到「%s」页面", subcategory)
         except PlaywrightTimeout:
             logger.error("未找到子菜单「%s」或页面加载超时", subcategory)
             self._save_debug_screenshot(f"subcategory_{subcategory}_failed")
             raise
+        time.sleep(2)
+        try:
+            self.page.wait_for_load_state("networkidle", timeout=15000)
+        except PlaywrightTimeout:
+            logger.warning("「%s」页面 networkidle 超时，继续执行", subcategory)
+        logger.info("已导航到「%s」页面", subcategory)
 
     def navigate_to_page(self, category: str, page_name: str,
                           subcategory_path: Optional[str] = None):
