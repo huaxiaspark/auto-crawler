@@ -21,10 +21,12 @@ def notify_with_retry(platform: dict, payload: dict):
 
     for attempt in range(retry_times):
         try:
+            token = platform.get("token", "")
+            headers = {"Authorization": f"Bearer {token}"} if token else {}
             resp = httpx.post(
                 url,
                 json=payload,
-                headers={"Authorization": f"Bearer {platform['token']}"},
+                headers=headers,
                 timeout=30,
             )
             logger.debug(f"平台 {name} 响应，status={resp.status_code}，body={resp.text[:200]}")
