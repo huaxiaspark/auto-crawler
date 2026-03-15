@@ -416,15 +416,14 @@ touch ../data-verify/validation_errors.txt
 定时模式（后台运行）：
 
 ```bash
-nohup python main.py --mode scheduled > logs/stdout.log 2>&1 &
-echo $! > crawler-service.pid
+nohup python main.py --mode scheduled > logs/stdout.log 2>&1 & echo $! > crawler-service.pid
 ```
 
 手动批量模式：
 
 ```bash
-python main.py --mode batch --start 2025-01-01 --end 2025-01-31
-python main.py --mode batch --start 2025-01-01 --end 2025-01-31 --task 日前备用总量,断面约束
+python main.py --mode batch --start 2026-03-01 --end 2026-03-02
+python main.py --mode batch --start 2026-03-01 --end 2026-03-02 --task 日前备用总量,断面约束
 ```
 
 **8. 停止服务**
