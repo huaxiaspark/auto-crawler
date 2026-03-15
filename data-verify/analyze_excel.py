@@ -25,6 +25,7 @@ from pathlib import Path
 
 import pandas as pd
 import yaml
+from typing import Optional
 
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
@@ -57,7 +58,7 @@ def generate_date_range(start: str, end: str) -> list:
     return dates
 
 
-def extract_date_from_filename(filename: str) -> str | None:
+def extract_date_from_filename(filename: str) -> Optional[str]:
     """从文件名末尾提取 YYYY-MM-DD 格式日期，返回字符串或 None"""
     # 去掉扩展名后取最后一个 _ 分隔段
     stem = re.sub(r'\.(xlsx|csv)$', '', filename, flags=re.IGNORECASE)
@@ -71,7 +72,7 @@ def extract_date_from_filename(filename: str) -> str | None:
     return None
 
 
-def parse_date_channel_filename(filename: str, prefix: str) -> dict | None:
+def parse_date_channel_filename(filename: str, prefix: str) -> Optional[dict]:
     """解析 {prefix}{date}_{channel}.xlsx 格式文件名
     返回 {'date': ..., 'channel': ...} 或 None
     """
@@ -149,7 +150,7 @@ def _normalize_text(s: str) -> str:
     return s.replace('（', '(').replace('）', ')')
 
 
-def _try_parse_date(val, date_formats: list) -> datetime | None:
+def _try_parse_date(val, date_formats: list) -> Optional[datetime]:
     """尝试将值解析为 datetime，失败返回 None"""
     if isinstance(val, datetime):
         return val
@@ -201,7 +202,7 @@ def _read_csv_frames(filepath: str, max_rows: int) -> list:
     return []
 
 
-def check_file_readable(filepath: str) -> tuple[bool, str | None]:
+def check_file_readable(filepath: str) -> tuple:
     """检查文件是否可读，返回 (ok, error_msg)"""
     try:
         if filepath.lower().endswith('.csv'):
@@ -219,7 +220,7 @@ def check_file_readable(filepath: str) -> tuple[bool, str | None]:
 # 校验逻辑
 # ============================================================
 
-def check_date_consistency(file_info: dict, cfg: dict) -> tuple[bool, dict | None]:
+def check_date_consistency(file_info: dict, cfg: dict) -> tuple:
     """校验文件名日期与表格内日期是否一致"""
     perf = cfg['global']['performance']
     max_rows = perf['max_rows_to_scan']
@@ -286,7 +287,7 @@ def check_date_consistency(file_info: dict, cfg: dict) -> tuple[bool, dict | Non
     }
 
 
-def check_channel_consistency(file_info: dict, standard_channels: list, cfg: dict) -> tuple[bool, dict | None]:
+def check_channel_consistency(file_info: dict, standard_channels: list, cfg: dict) -> tuple:
     """校验文件名通道与表格内通道是否一致"""
     perf = cfg['global']['performance']
     max_rows = perf['scan_rows_for_content']
@@ -357,7 +358,7 @@ def check_channel_consistency(file_info: dict, standard_channels: list, cfg: dic
     }
 
 
-def _read_raw_channel_value(filepath: str, channel_keywords: list, max_rows: int, max_header: int) -> str | None:
+def _read_raw_channel_value(filepath: str, channel_keywords: list, max_rows: int, max_header: int) -> Optional[str]:
     """读取通道列中第一个非空原始值"""
     for h in range(max_header):
         try:
@@ -375,7 +376,7 @@ def _read_raw_channel_value(filepath: str, channel_keywords: list, max_rows: int
     return None
 
 
-def check_completeness(files: list, target_date: str, validator_cfg: dict) -> tuple[bool, dict]:
+def check_completeness(files: list, target_date: str, validator_cfg: dict) -> tuple:
     """检查指定日期的文件完整性（文件数量 / 通道覆盖）
 
     files: 已完成内容校验并清理后的剩余文件列表（由调用方传入 remaining_files）
@@ -409,7 +410,7 @@ def check_completeness(files: list, target_date: str, validator_cfg: dict) -> tu
     }
 
 
-def _find_validator_cfg(cfg: dict, file_info: dict) -> dict | None:
+def _find_validator_cfg(cfg: dict, file_info: dict) -> Optional[dict]:
     """根据文件信息找到对应的 validator 配置"""
     for v in cfg.get('validators', []):
         prefix = v['file_pattern']['prefix']
@@ -586,8 +587,8 @@ def _write_error_entry(f, entry: dict, kind: str):
 _DELETABLE_ERROR_TYPES = {'date_mismatch', 'channel_mismatch', 'read_error'}
 
 
-def _should_delete(date_ok: bool, date_reason: dict | None,
-                   channel_ok: bool, channel_reason: dict | None) -> bool:
+def _should_delete(date_ok: bool, date_reason: Optional[dict],
+                   channel_ok: bool, channel_reason: Optional[dict]) -> bool:
     """判断文件是否应被删除：仅当存在实质性数据错误时才删除。
     实质性错误类型：date_mismatch / channel_mismatch / read_error。
     有表头但无数据（no_date_data / no_date_header / no_channel_header 等）视为内容通过，不删除。
