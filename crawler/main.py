@@ -371,6 +371,11 @@ def main():
         tasks = {t: tasks[t] for t in loss_queries}
         total_loss = sum(len(v) for v in loss_queries.values())
         logger.info("已从 %s 解析出 %d 个任务，共 %d 条缺失记录", args.loss_file, len(loss_queries), total_loss)
+        # 从 loss 文件中推导实际日期范围，用于日志展示
+        all_dates = [d for entries in loss_queries.values() for d, _ in entries]
+        if all_dates:
+            start_date = min(all_dates)
+            end_date = max(all_dates)
 
     # 验证日期（loss 模式下日期来自文件，跳过范围验证）
     if not loss_queries:
