@@ -13,7 +13,7 @@ browser:
   #     示例: google-chrome --remote-debugging-port=9222
   #   "launch" - 启动全新的 Chromium 浏览器（需自行处理登录）
   mode: "connect"
-  cdp_url: "http://host.docker.internal:9222"  # Chrome DevTools Protocol 地址
+  cdp_url: "http://localhost:9222"  # Chrome DevTools Protocol 地址
   target_url_pattern: "pmos.sx.sgcc.com.cn"  # 用于匹配目标标签页的 URL 关键词
   headless: false            # 仅 launch 模式有效：是否无头模式
   slow_mo: 300               # 仅 launch 模式有效：操作间隔（毫秒）
