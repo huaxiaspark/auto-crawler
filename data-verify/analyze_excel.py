@@ -109,7 +109,7 @@ def discover_files(directory: str, validator_cfg: dict) -> list:
             ext = os.path.splitext(effective_name)[1].lower()
             if ext not in extensions:
                 continue
-            if not effective_name.startswith(prefix.rstrip('_')):
+            if not effective_name.startswith(prefix):
                 continue
 
             filepath = os.path.join(root, fname)
@@ -412,7 +412,7 @@ def check_completeness(files: list, target_date: str, validator_cfg: dict) -> tu
 def _find_validator_cfg(cfg: dict, file_info: dict) -> dict | None:
     """根据文件信息找到对应的 validator 配置"""
     for v in cfg.get('validators', []):
-        prefix = v['file_pattern']['prefix'].rstrip('_')
+        prefix = v['file_pattern']['prefix']
         if file_info['filename'].startswith(prefix) or \
            (file_info['filename'].startswith('.~') and file_info['filename'][2:].startswith(prefix)):
             return v
