@@ -54,6 +54,8 @@ def _flatten_and_classify(data_dir: str):
         fpath = os.path.join(data_dir, fname)
         if not os.path.isfile(fpath):
             continue
+        if not fname.endswith((".xlsx", ".csv")):
+            continue
         task_name = fname.split("_")[0] if "_" in fname else fname
         task_dir = os.path.join(data_dir, task_name)
         os.makedirs(task_dir, exist_ok=True)

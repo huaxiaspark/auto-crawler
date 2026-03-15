@@ -39,11 +39,17 @@ def run(object_name: str, md5: str, date_range: dict, categories: list, config: 
         raise ValueError(msg)
     logger.info(f"[Step 2] MD5 校验通过，md5={md5}")
 
-    # 清空 data/ 和 output/ 目录
+    # 清空 data/ 和 output/ 目录（保留目录本身，兼容 Docker volume 挂载点）
     for d in [data_dir, output_dir]:
         if os.path.exists(d):
-            shutil.rmtree(d)
-        os.makedirs(d, exist_ok=True)
+            for item in os.listdir(d):
+                item_path = os.path.join(d, item)
+                if os.path.isdir(item_path):
+                    shutil.rmtree(item_path)
+                else:
+                    os.remove(item_path)
+        else:
+            os.makedirs(d, exist_ok=True)
     logger.info("[Step 2] 已清空 data/ 和 output/ 目录")
 
     # 解压
