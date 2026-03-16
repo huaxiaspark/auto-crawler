@@ -10,14 +10,48 @@
 from __future__ import annotations
 
 import argparse
+import logging
+import os
 import sys
+import time
 import warnings
 from datetime import datetime
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import yaml
+
+
+_LOG_FMT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+_DATE_FMT = "%Y-%m-%d %H:%M:%S"
+_DEFAULT_MAX_MB = 5
+
+
+class _SizedTimedRotatingFileHandler(TimedRotatingFileHandler):
+    def __init__(self, *args, max_bytes: int = 0, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.max_bytes = max_bytes
+        self._size_rollover_count = 0
+
+    def emit(self, record):
+        try:
+            if (
+                self.max_bytes > 0
+                and os.path.exists(self.baseFilename)
+                and os.path.getsize(self.baseFilename) >= self.max_bytes
+            ):
+                self._size_rollover_count += 1
+                new = f"{self.baseFilename}.{time.strftime(self.suffix, time.localtime())}_{self._size_rollover_count}"
+                if self.stream:
+                    self.stream.close()
+                    self.stream = None
+                os.rename(self.baseFilename, new)
+                self.stream = self._open()
+        except Exception:
+            pass
+        super().emit(record)
 
 warnings.filterwarnings("ignore", category=UserWarning, module="openpyxl")
 
@@ -82,7 +116,7 @@ def save_csv_with_split(df: pd.DataFrame, base_path: Path, **to_csv_kwargs) -> N
     for i in range(n_parts):
         part = df.iloc[i * chunk_size: min((i + 1) * chunk_size, n)]
         part.to_csv(parent / f"{stem}_part{i + 1}.csv", **opts)
-    print(f"    (已拆分为 {n_parts} 个文件)")
+    logging.info("已拆分为 %d 个文件", n_parts)
 
 
 def extract_date_000(val) -> str:
@@ -162,10 +196,10 @@ def process_section_constraints(input_dir: Path, task: dict) -> None:
                 if sn and sn != "nan":
                     section_info[sn] = str(row[cols[3]]).strip()
         except Exception as e:
-            print(f"  警告: 跳过 {f.name}: {e}", file=sys.stderr)
+            logging.warning("跳过 %s: %s", f.name, e)
 
     if not all_data:
-        print("  未读取到有效数据")
+        logging.warning("未读取到有效数据")
         return
     merged = pd.concat(all_data, ignore_index=True)
     merged["timestamp"] = merged["日期"].apply(extract_date_000)
@@ -183,7 +217,7 @@ def process_section_constraints(input_dir: Path, task: dict) -> None:
     if task.get("mapping_file"):
         info_df = pd.DataFrame([{cols[2]: k, cols[3]: v} for k, v in sorted(section_info.items())])
         info_df.to_csv(out_dir / task["mapping_file"], index=False, encoding="utf-8")
-    print(f"  已输出: {out_dir}")
+    logging.info("已输出: %s", out_dir)
 
 
 def process_reserve_capacity(input_dir: Path, task: dict) -> None:
@@ -210,14 +244,14 @@ def process_reserve_capacity(input_dir: Path, task: dict) -> None:
                 rec[vc["name"]] = float(v) if pd.notna(v) else None
             rows.append(rec)
         except Exception as e:
-            print(f"  警告: 跳过 {f.name}: {e}", file=sys.stderr)
+            logging.warning("跳过 %s: %s", f.name, e)
 
     if not rows:
-        print("  未读取到有效数据")
+        logging.warning("未读取到有效数据")
         return
     out_df = pd.DataFrame(rows).sort_values("timestamp").reset_index(drop=True)
     save_csv_with_split(out_df, out_dir / task["output_file"])
-    print(f"  已输出: {out_dir}")
+    logging.info("已输出: %s", out_dir)
 
 
 def process_clearing_quantity(input_dir: Path, task: dict) -> None:
@@ -239,17 +273,17 @@ def process_clearing_quantity(input_dir: Path, task: dict) -> None:
             df = df.dropna(subset=["日期", cols[2]])
             all_data.append(df)
         except Exception as e:
-            print(f"  警告: 跳过 {f.name}: {e}", file=sys.stderr)
+            logging.warning("跳过 %s: %s", f.name, e)
 
     if not all_data:
-        print("  未读取到有效数据")
+        logging.warning("未读取到有效数据")
         return
     merged = pd.concat(all_data, ignore_index=True)
     merged["timestamp"] = merged.apply(lambda r: merge_datetime(r["日期"], r[cols[2]]), axis=1)
     merged = merged[merged["timestamp"] != ""][["timestamp", cols[3]]]
     merged = merged.sort_values("timestamp").reset_index(drop=True)
     save_csv_with_split(merged, out_dir / task["output_file"])
-    print(f"  已输出: {out_dir}")
+    logging.info("已输出: %s", out_dir)
 
 
 def process_channel_numeric(input_dir: Path, task: dict) -> None:
@@ -276,17 +310,17 @@ def process_channel_numeric(input_dir: Path, task: dict) -> None:
             df = df[df["timestamp"] != ""][["timestamp", name_col, "数值"]]
             all_data.append(df)
         except Exception as e:
-            print(f"  警告: 跳过 {f.name}: {e}", file=sys.stderr)
+            logging.warning("跳过 %s: %s", f.name, e)
 
     if not all_data:
-        print("  未读取到有效数据")
+        logging.warning("未读取到有效数据")
         return
     merged = pd.concat(all_data, ignore_index=True)
     wide = merged.pivot_table(index="timestamp", columns=name_col, values="数值", aggfunc="first")
     wide.reset_index(inplace=True)
     wide = wide.sort_values("timestamp").reset_index(drop=True)
     save_csv_with_split(wide, out_dir / task["output_file"])
-    print(f"  已输出: {out_dir}")
+    logging.info("已输出: %s", out_dir)
 
 
 def process_channel_text(input_dir: Path, task: dict) -> None:
@@ -313,10 +347,10 @@ def process_channel_text(input_dir: Path, task: dict) -> None:
             df["数值"] = df[value_col].apply(lambda v: apply_value_map(v, map_name))
             all_data.append(df[["timestamp", name_col, "数值"]])
         except Exception as e:
-            print(f"  警告: 跳过 {f.name}: {e}", file=sys.stderr)
+            logging.warning("跳过 %s: %s", f.name, e)
 
     if not all_data:
-        print("  未读取到有效数据")
+        logging.warning("未读取到有效数据")
         return
     merged = pd.concat(all_data, ignore_index=True)
     wide = merged.pivot_table(index="timestamp", columns=name_col, values="数值", aggfunc="first")
@@ -326,7 +360,7 @@ def process_channel_text(input_dir: Path, task: dict) -> None:
 
     if task.get("mapping_file"):
         write_mapping_csv(out_dir, task["mapping_file"], map_name, value_col)
-    print(f"  已输出: {out_dir}")
+    logging.info("已输出: %s", out_dir)
 
 
 def _collect_node_lmp_files(input_dir: Path, task: dict) -> list[Path]:
@@ -360,10 +394,10 @@ def process_node_lmp(input_dir: Path, task: dict) -> None:
             df = df[df["timestamp"] != ""]
             all_data.append(df)
         except Exception as e:
-            print(f"  警告: 跳过 {f.name}: {e}", file=sys.stderr)
+            logging.warning("跳过 %s: %s", f.name, e)
 
     if not all_data:
-        print("  未读取到有效数据")
+        logging.warning("未读取到有效数据")
         return
     merged = pd.concat(all_data, ignore_index=True)
     for lc in lmp_cols_cfg:
@@ -374,7 +408,7 @@ def process_node_lmp(input_dir: Path, task: dict) -> None:
         wide.reset_index(inplace=True)
         wide = wide.sort_values("timestamp").reset_index(drop=True)
         save_csv_with_split(wide, out_dir / f"{prefix}_{lc['suffix']}")
-    print(f"  已输出: {out_dir}")
+    logging.info("已输出: %s", out_dir)
 
 
 def process_reservoir_level(input_dir: Path, task: dict) -> None:
@@ -399,17 +433,17 @@ def process_reservoir_level(input_dir: Path, task: dict) -> None:
             df["timestamp"] = df["日期"].apply(extract_date_000)
             all_data.append(df[df["timestamp"] != ""][["timestamp", name_col, value_col]])
         except Exception as e:
-            print(f"  警告: 跳过 {f.name}: {e}", file=sys.stderr)
+            logging.warning("跳过 %s: %s", f.name, e)
 
     if not all_data:
-        print("  未读取到有效数据")
+        logging.warning("未读取到有效数据")
         return
     merged = pd.concat(all_data, ignore_index=True)
     wide = merged.pivot_table(index="timestamp", columns=name_col, values=value_col, aggfunc="first")
     wide.reset_index(inplace=True)
     wide = wide.sort_values("timestamp").reset_index(drop=True)
     save_csv_with_split(wide, out_dir / task["output_file"])
-    print(f"  已输出: {out_dir}")
+    logging.info("已输出: %s", out_dir)
 
 
 def process_reserve_demand(input_dir: Path, task: dict) -> None:
@@ -434,17 +468,17 @@ def process_reserve_demand(input_dir: Path, task: dict) -> None:
             df["timestamp"] = df["日期"].apply(extract_date_000)
             all_data.append(df[df["timestamp"] != ""][["timestamp", name_col, value_col]])
         except Exception as e:
-            print(f"  警告: 跳过 {f.name}: {e}", file=sys.stderr)
+            logging.warning("跳过 %s: %s", f.name, e)
 
     if not all_data:
-        print("  未读取到有效数据")
+        logging.warning("未读取到有效数据")
         return
     merged = pd.concat(all_data, ignore_index=True)
     wide = merged.pivot_table(index="timestamp", columns=name_col, values=value_col, aggfunc="first")
     wide.reset_index(inplace=True)
     wide = wide.sort_values("timestamp").reset_index(drop=True)
     save_csv_with_split(wide, out_dir / task["output_file"])
-    print(f"  已输出: {out_dir}")
+    logging.info("已输出: %s", out_dir)
 
 
 def process_clearing_overview_excel(input_dir: Path, task: dict) -> None:
@@ -466,15 +500,15 @@ def process_clearing_overview_excel(input_dir: Path, task: dict) -> None:
             df["timestamp"] = df["日期"].apply(extract_date_000)
             all_data.append(df[df["timestamp"] != ""][["timestamp", cols[2]]])
         except Exception as e:
-            print(f"  警告: 跳过 {f.name}: {e}", file=sys.stderr)
+            logging.warning("跳过 %s: %s", f.name, e)
 
     if not all_data:
-        print("  未读取到有效数据")
+        logging.warning("未读取到有效数据")
         return
     merged = pd.concat(all_data, ignore_index=True)
     merged = merged.sort_values("timestamp").reset_index(drop=True)
     save_csv_with_split(merged, out_dir / task["output_file"])
-    print(f"  已输出: {out_dir}")
+    logging.info("已输出: %s", out_dir)
 
 
 def process_clearing_overview_csv(input_dir: Path, task: dict) -> None:
@@ -496,16 +530,16 @@ def process_clearing_overview_csv(input_dir: Path, task: dict) -> None:
             df["timestamp"] = df["日期"].apply(extract_date_000)
             all_data.append(df[df["timestamp"] != ""][["timestamp", "出清概况"]])
         except Exception as e:
-            print(f"  警告: 跳过 {f.name}: {e}", file=sys.stderr)
+            logging.warning("跳过 %s: %s", f.name, e)
 
     if not all_data:
-        print("  未读取到有效数据")
+        logging.warning("未读取到有效数据")
         return
     merged = pd.concat(all_data, ignore_index=True)
     merged = merged.drop_duplicates(subset=["timestamp"], keep="last")
     merged = merged.sort_values("timestamp").reset_index(drop=True)
     save_csv_with_split(merged, out_dir / task["output_file"])
-    print(f"  已输出: {out_dir}")
+    logging.info("已输出: %s", out_dir)
 
 
 def process_unit_commitment(input_dir: Path, task: dict) -> None:
@@ -535,10 +569,10 @@ def process_unit_commitment(input_dir: Path, task: dict) -> None:
             nc = name_col if name_col in df.columns else df.columns[0]
             all_data.append(df[["timestamp", nc, "状态值"]].rename(columns={nc: name_col}))
         except Exception as e:
-            print(f"  警告: 跳过 {f.name}: {e}", file=sys.stderr)
+            logging.warning("跳过 %s: %s", f.name, e)
 
     if not all_data:
-        print("  未读取到有效数据")
+        logging.warning("未读取到有效数据")
         return
     merged = pd.concat(all_data, ignore_index=True)
     wide = merged.pivot_table(index="timestamp", columns=name_col, values="状态值", aggfunc="first")
@@ -548,7 +582,7 @@ def process_unit_commitment(input_dir: Path, task: dict) -> None:
 
     if task.get("mapping_file"):
         write_mapping_csv(out_dir, task["mapping_file"], map_name, "开停状态")
-    print(f"  已输出: {out_dir}")
+    logging.info("已输出: %s", out_dir)
 
 
 def process_node_factor(input_dir: Path, task: dict) -> None:
@@ -570,17 +604,17 @@ def process_node_factor(input_dir: Path, task: dict) -> None:
             df["timestamp"] = df["日期"].apply(extract_date_000)
             all_data.append(df[df["timestamp"] != ""][["timestamp", name_col, value_col]])
         except Exception as e:
-            print(f"  警告: 跳过 {f.name}: {e}", file=sys.stderr)
+            logging.warning("跳过 %s: %s", f.name, e)
 
     if not all_data:
-        print("  未读取到有效数据")
+        logging.warning("未读取到有效数据")
         return
     merged = pd.concat(all_data, ignore_index=True)
     wide = merged.pivot_table(index="timestamp", columns=name_col, values=value_col, aggfunc="first")
     wide.reset_index(inplace=True)
     wide = wide.sort_values("timestamp").reset_index(drop=True)
     save_csv_with_split(wide, out_dir / task["output_file"])
-    print(f"  已输出: {out_dir}")
+    logging.info("已输出: %s", out_dir)
 
 
 def process_maintenance_plan(input_dir: Path, task: dict) -> None:
@@ -605,15 +639,15 @@ def process_maintenance_plan(input_dir: Path, task: dict) -> None:
             df["timestamp"] = df["日期"].apply(extract_date_000)
             all_data.append(df)
         except Exception as e:
-            print(f"  警告: 跳过 {f.name}: {e}", file=sys.stderr)
+            logging.warning("跳过 %s: %s", f.name, e)
 
     if not all_data:
-        print("  未读取到有效数据")
+        logging.warning("未读取到有效数据")
         return
     merged = pd.concat(all_data, ignore_index=True)
     merged = merged.sort_values(["timestamp", cols[2]]).reset_index(drop=True)
     save_csv_with_split(merged, out_dir / task["output_file"])
-    print(f"  已输出: {out_dir}")
+    logging.info("已输出: %s", out_dir)
 
 
 def _merge_date_period(date_val, period: int, offsets: dict) -> str:
@@ -645,7 +679,7 @@ def process_secondary_freq_clearing(input_dir: Path, task: dict) -> None:
             try:
                 df = pd.read_excel(f, header=0)
             except Exception as e:
-                print(f"  警告: 跳过 {f.name}: {e}", file=sys.stderr)
+                logging.warning("跳过 %s: %s", f.name, e)
                 continue
         try:
             if df.empty:
@@ -658,16 +692,16 @@ def process_secondary_freq_clearing(input_dir: Path, task: dict) -> None:
             df = df[df["timestamp"] != ""]
             all_data.append(df)
         except Exception as e:
-            print(f"  警告: 跳过 {f.name}: {e}", file=sys.stderr)
+            logging.warning("跳过 %s: %s", f.name, e)
 
     if not all_data:
-        print("  未读取到有效数据")
+        logging.warning("未读取到有效数据")
         return
     merged = pd.concat(all_data, ignore_index=True)
     keep = [c for c in out_cols if c in merged.columns]
     merged = merged[keep].sort_values("timestamp").reset_index(drop=True)
     save_csv_with_split(merged, out_dir / task["output_file"])
-    print(f"  已输出: {out_dir}")
+    logging.info("已输出: %s", out_dir)
 
 
 def process_coal_unit_capacity(input_dir: Path, task: dict) -> None:
@@ -698,10 +732,10 @@ def process_coal_unit_capacity(input_dir: Path, task: dict) -> None:
                 df[f"{test_col}_数值"] = df[test_col].apply(lambda v: apply_value_map(v, map_name))
             all_data.append(df)
         except Exception as e:
-            print(f"  警告: 跳过 {f.name}: {e}", file=sys.stderr)
+            logging.warning("跳过 %s: %s", f.name, e)
 
     if not all_data:
-        print("  未读取到有效数据")
+        logging.warning("未读取到有效数据")
         return
     merged = pd.concat(all_data, ignore_index=True)
 
@@ -716,7 +750,7 @@ def process_coal_unit_capacity(input_dir: Path, task: dict) -> None:
 
     if test_col and map_name and task.get("mapping_file"):
         write_mapping_csv(out_dir, task["mapping_file"], map_name, test_col)
-    print(f"  已输出: {out_dir}")
+    logging.info("已输出: %s", out_dir)
 
 
 def process_unit_generation_curve(input_dir: Path, task: dict) -> None:
@@ -761,17 +795,17 @@ def process_unit_generation_curve(input_dir: Path, task: dict) -> None:
             if long_rows:
                 all_data.append(pd.DataFrame(long_rows))
         except Exception as e:
-            print(f"  警告: 跳过 {f.name}: {e}", file=sys.stderr)
+            logging.warning("跳过 %s: %s", f.name, e)
 
     if not all_data:
-        print("  未读取到有效数据")
+        logging.warning("未读取到有效数据")
         return
     merged = pd.concat(all_data, ignore_index=True)
     wide = merged.pivot_table(index="timestamp", columns=name_col, values=value_col, aggfunc="first")
     wide.reset_index(inplace=True)
     wide = wide.sort_values("timestamp").reset_index(drop=True)
     save_csv_with_split(wide, out_dir / task["output_file"])
-    print(f"  已输出: {out_dir}")
+    logging.info("已输出: %s", out_dir)
 
 
 # ── 处理器注册表 ────────────────────────────────────────────────
@@ -812,21 +846,41 @@ def main() -> int:
 
     config_path = Path(args.config)
     if not config_path.exists():
-        print(f"错误: 配置文件不存在 {config_path}")
+        logging.error("配置文件不存在 %s", config_path)
         return 1
 
     cfg = load_config(config_path)
     base_dir = Path(__file__).resolve().parent
     _init_globals(cfg, base_dir)
 
+    # 初始化日志
+    log_dir = cfg.get("global", {}).get("log_dir", str(base_dir / "logs"))
+    max_size_mb = cfg.get("global", {}).get("log_max_size_mb", _DEFAULT_MAX_MB)
+    os.makedirs(log_dir, exist_ok=True)
+    _fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    _root = logging.getLogger()
+    if not _root.handlers:
+        _root.setLevel(logging.INFO)
+        _ch = logging.StreamHandler()
+        _ch.setFormatter(_fmt)
+        _root.addHandler(_ch)
+        _fh = _SizedTimedRotatingFileHandler(
+            os.path.join(log_dir, "batch_process.log"),
+            when="midnight", interval=1, backupCount=30, encoding="utf-8",
+            max_bytes=max_size_mb * 1024 * 1024,
+        )
+        _fh.suffix = "%Y%m%d"
+        _fh.setFormatter(_fmt)
+        _root.addHandler(_fh)
+
     if not _DATA_ROOT.exists():
-        print(f"错误: 数据目录不存在 {_DATA_ROOT}")
+        logging.error("数据目录不存在 %s", _DATA_ROOT)
         return 1
     _OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 
-    print(f"配置文件: {config_path}")
-    print(f"数据根目录: {_DATA_ROOT}")
-    print(f"输出目录: {_OUTPUT_ROOT}\n")
+    logging.info("配置文件: %s", config_path)
+    logging.info("数据根目录: %s", _DATA_ROOT)
+    logging.info("输出目录: %s", _OUTPUT_ROOT)
 
     filter_tasks = set(args.task) if args.task else None
     tasks = cfg.get("tasks", [])
@@ -839,7 +893,7 @@ def main() -> int:
         task_type = task.get("type")
         processor = PROCESSOR_REGISTRY.get(task_type)
         if not processor:
-            print(f"[跳过] {name} (未知处理类型: {task_type})")
+            logging.warning("[跳过] %s (未知处理类型: %s)", name, task_type)
             continue
 
         # 节点边际电价支持目录前缀匹配，目录可能不存在
@@ -849,25 +903,23 @@ def main() -> int:
                 d.is_dir() and d.name.startswith(name) for d in _DATA_ROOT.iterdir()
             )
             if not has_data:
-                print(f"[跳过] {name} (目录不存在)")
+                logging.warning("[跳过] %s (目录不存在)", name)
                 continue
         elif not input_dir.exists():
-            print(f"[跳过] {name} (目录不存在)")
+            logging.warning("[跳过] %s (目录不存在)", name)
             continue
         else:
             if not list(input_dir.glob("*.xlsx")) and not list(input_dir.glob("*.csv")):
-                print(f"[跳过] {name} (无 xlsx/csv 文件)")
+                logging.warning("[跳过] %s (无 xlsx/csv 文件)", name)
                 continue
 
-        print(f"[处理] {name} ...")
+        logging.info("[处理] %s ...", name)
         try:
             processor(input_dir, task)
         except Exception as e:
-            print(f"  错误: {e}", file=sys.stderr)
-            import traceback
-            traceback.print_exc()
+            logging.error("[%s] 处理失败: %s", name, e, exc_info=True)
 
-    print("\n全部完成")
+    logging.info("全部完成")
     return 0
 
 

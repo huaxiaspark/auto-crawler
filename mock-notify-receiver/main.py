@@ -10,8 +10,8 @@ import api
 if __name__ == "__main__":
     config = load_config()
     log_dir = config.get("log_dir", "./logs")
-    setup_logger("main", log_dir)
-    setup_logger("api", log_dir)
+    setup_logger("main", log_dir, max_size_mb=config.get("log_max_size_mb", 5))
+    setup_logger("api", log_dir, max_size_mb=config.get("log_max_size_mb", 5))
 
     logger = logging.getLogger("main")
     logger.info("mock-notify-receiver 启动")

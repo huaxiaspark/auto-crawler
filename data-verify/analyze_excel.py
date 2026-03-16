@@ -16,16 +16,49 @@ Excel文件分析与数据校验系统
 """
 
 import argparse
+import logging
 import os
 import re
+import time
 import warnings
 from collections import Counter
 from datetime import datetime, timedelta
+from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
 import pandas as pd
 import yaml
 from typing import Optional
+
+
+_LOG_FMT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+_DATE_FMT = "%Y-%m-%d %H:%M:%S"
+_DEFAULT_MAX_MB = 5
+
+
+class _SizedTimedRotatingFileHandler(TimedRotatingFileHandler):
+    def __init__(self, *args, max_bytes: int = 0, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.max_bytes = max_bytes
+        self._size_rollover_count = 0
+
+    def emit(self, record):
+        try:
+            if (
+                self.max_bytes > 0
+                and os.path.exists(self.baseFilename)
+                and os.path.getsize(self.baseFilename) >= self.max_bytes
+            ):
+                self._size_rollover_count += 1
+                new = f"{self.baseFilename}.{time.strftime(self.suffix, time.localtime())}_{self._size_rollover_count}"
+                if self.stream:
+                    self.stream.close()
+                    self.stream = None
+                os.rename(self.baseFilename, new)
+                self.stream = self._open()
+        except Exception:
+            pass
+        super().emit(record)
 
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
@@ -463,9 +496,9 @@ def write_missing_report(cfg: dict, missing_files: list) -> str:
                 parts = [p for p in [name, item['date'], ch] if p]
                 f.write(','.join(parts) + '\n')
     if missing_files:
-        print(f"⚠️  缺失文件列表已保存至: {path}（共 {len(missing_files)} 个）")
+        logging.warning("缺失文件列表已保存至: %s（共 %d 个）", path, len(missing_files))
     else:
-        print(f"✅ 无缺失文件，报告已保存至: {path}")
+        logging.info("无缺失文件，报告已保存至: %s", path)
     return path
 
 
@@ -558,9 +591,9 @@ def write_errors_report(cfg: dict, all_validator_errors: list) -> str:
         f.write(f"\n报告生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
     if total_date_errors or total_ch_errors:
-        print(f"⚠️  校验错误报告已保存至: {path}（日期错误: {total_date_errors}，通道错误: {total_ch_errors}）")
+        logging.warning("校验错误报告已保存至: %s（日期错误: %d，通道错误: %d）", path, total_date_errors, total_ch_errors)
     else:
-        print(f"✅ 无内容校验错误，报告已保存至: {path}")
+        logging.info("无内容校验错误，报告已保存至: %s", path)
     return path
 
 
@@ -673,10 +706,11 @@ def run_validator(validator_cfg: dict, cfg: dict, target_dates: list):
                     try:
                         os.remove(f['filepath'])
                         print(f"  🗑 已删除: {f['filename']}")
+                        logging.info("已删除问题文件: %s", f['filename'])
                         deleted_count += 1
                         deleted_paths.add(f['filepath'])
                     except OSError as e:
-                        print(f"  ⚠ 删除失败 {f['filename']}: {e}")
+                        logging.warning("删除失败 %s: %s", f['filename'], e)
 
             if i % 100 == 0 or i == total:
                 print(f"  进度: {i}/{total}")
@@ -745,12 +779,32 @@ def main(config_path: str = None):
     cfg = load_config(config_path)
     g = cfg['global']
 
+    # 初始化日志
+    log_dir = g.get('log_dir', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs'))
+    max_size_mb = g.get('log_max_size_mb', _DEFAULT_MAX_MB)
+    os.makedirs(log_dir, exist_ok=True)
+    _fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+    _root = logging.getLogger()
+    if not _root.handlers:
+        _root.setLevel(logging.INFO)
+        _ch = logging.StreamHandler()
+        _ch.setFormatter(_fmt)
+        _root.addHandler(_ch)
+        _fh = _SizedTimedRotatingFileHandler(
+            os.path.join(log_dir, "analyze_excel.log"),
+            when="midnight", interval=1, backupCount=30, encoding="utf-8",
+            max_bytes=max_size_mb * 1024 * 1024,
+        )
+        _fh.suffix = "%Y%m%d"
+        _fh.setFormatter(_fmt)
+        _root.addHandler(_fh)
+
     # 命令行参数覆盖 config.yaml 中的日期范围
     if args.start:
         try:
             datetime.strptime(args.start, '%Y-%m-%d')
         except ValueError:
-            print(f"❌ --start 日期格式错误: {args.start}，请使用 YYYY-MM-DD 格式")
+            logging.error("--start 日期格式错误: %s，请使用 YYYY-MM-DD 格式", args.start)
             return
         g['date_range']['start'] = args.start
 
@@ -758,7 +812,7 @@ def main(config_path: str = None):
         try:
             datetime.strptime(args.end, '%Y-%m-%d')
         except ValueError:
-            print(f"❌ --end 日期格式错误: {args.end}，请使用 YYYY-MM-DD 格式")
+            logging.error("--end 日期格式错误: %s，请使用 YYYY-MM-DD 格式", args.end)
             return
         g['date_range']['end'] = args.end
 
@@ -804,6 +858,7 @@ def main(config_path: str = None):
     print("=" * 80)
     if total_missing == 0 and total_errors == 0 and total_deleted == 0:
         print("✅ 所有校验通过，数据完整无误！")
+        logging.info("校验完成：所有数据完整无误")
     else:
         parts = []
         if total_deleted:
@@ -813,6 +868,7 @@ def main(config_path: str = None):
         if total_errors:
             parts.append(f"内容错误 {total_errors} 个")
         print(f"❌ 校验完成，发现问题：{' / '.join(parts)}")
+        logging.warning("校验完成，发现问题：%s", ' / '.join(parts))
 
 
 if __name__ == "__main__":

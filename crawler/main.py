@@ -32,6 +32,7 @@
 """
 
 import argparse
+import logging
 import os
 import sys
 import time
@@ -50,7 +51,7 @@ from utils.validator import DataValidator, validate_csv_file
 def load_config(config_path: str = "config.yaml") -> dict:
     """加载配置文件"""
     if not os.path.exists(config_path):
-        print(f"错误：配置文件不存在: {config_path}")
+        logging.error("配置文件不存在: %s", config_path)
         sys.exit(1)
 
     with open(config_path, "r", encoding="utf-8") as f:
@@ -97,7 +98,7 @@ def get_enabled_tasks(config: dict, task_filter: str = None) -> dict:
             if name in all_tasks:
                 filtered[name] = all_tasks[name]
             else:
-                print(f"警告：未找到任务「{name}」，可用任务: {', '.join(all_tasks.keys())}")
+                logging.warning("警告：未找到任务「%s」，可用任务: %s", name, ', '.join(all_tasks.keys()))
         return filtered
 
     # 返回所有启用的任务
@@ -327,13 +328,13 @@ def main():
     # 列出任务
     if args.list_tasks:
         all_tasks = config.get("tasks", {})
-        print("\n可用爬取任务:")
-        print("-" * 60)
+        logger.info("可用爬取任务:")
+        logger.info("-" * 60)
         for name, cfg in all_tasks.items():
             status = "启用" if cfg.get("enabled", True) else "禁用"
             category = cfg.get("category", "")
-            print(f"  [{status}] {category} > {name}")
-        print(f"\n共 {len(all_tasks)} 个任务")
+            logger.info("  [%s] %s > %s", status, category, name)
+        logger.info("共 %d 个任务", len(all_tasks))
         return
 
     # 仅校验模式

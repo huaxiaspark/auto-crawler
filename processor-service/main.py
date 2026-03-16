@@ -1,3 +1,5 @@
+import logging
+
 import uvicorn
 
 from config_loader import load_config
@@ -7,14 +9,8 @@ import api
 
 if __name__ == "__main__":
     config = load_config("config.yaml")
-    setup_logger("main", config["log_dir"])
-    setup_logger("api", config["log_dir"])
-    setup_logger("pipeline", config["log_dir"])
-    setup_logger("processor_runner", config["log_dir"])
-    setup_logger("uploader", config["log_dir"])
-    setup_logger("platform_notifier", config["log_dir"])
+    setup_logger("main", config["log_dir"], max_size_mb=config.get("log_max_size_mb", 5))
 
-    import logging
     logger = logging.getLogger("main")
     logger.info("processor-service 启动")
 

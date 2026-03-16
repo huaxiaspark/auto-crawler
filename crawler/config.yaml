@@ -53,8 +53,8 @@ storage:
 logging:
   level: "INFO"              # 日志级别：DEBUG / INFO / WARNING / ERROR
   log_dir: "./logs"          # 日志目录
-  max_size_mb: 10            # 单文件最大大小（MB）
-  backup_count: 5            # 保留文件数
+  max_size_mb: 5             # 单文件最大大小（MB），超出后立即滚动
+  backup_count: 30           # 按日期滚动，保留天数
 
 # ============================================================
 # 爬取任务开关 - 可单独启用/禁用每个数据类别

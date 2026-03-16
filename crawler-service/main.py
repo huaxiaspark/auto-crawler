@@ -21,7 +21,7 @@ def parse_args():
 
 if __name__ == "__main__":
     config = load_config("config.yaml")
-    logger = setup_logger("main", config["log_dir"])
+    logger = setup_logger("main", config["log_dir"], max_size_mb=config.get("log_max_size_mb", 5))
     args = parse_args()
 
     logger.info(f"crawler-service 启动，mode={args.mode}")

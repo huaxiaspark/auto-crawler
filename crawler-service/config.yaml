@@ -34,3 +34,4 @@ notify:
   retry_interval_seconds: 30
 
 log_dir: "./logs"
+log_max_size_mb: 5             # 单日志文件最大大小（MB），超出后立即滚动
