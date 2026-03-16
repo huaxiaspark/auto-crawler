@@ -346,7 +346,7 @@ class Navigator:
                 logger.debug("等待 networkidle 超时，继续")
 
             # 在打开的综合查询页面内完成后续导航
-            self._navigate_comprehensive_query(page_name, subcategory_path)
+            self._navigate_comprehensive_query(page_name, subcategory_path, category)
         else:
             # ── 常规路径：展开二级分类 → 点击目标页面 ──
             self.navigate_to_category(category)
@@ -418,7 +418,8 @@ class Navigator:
             f"在主页面和所有 iframe 中均未找到包含「{text}」的可见元素"
         )
 
-    def _navigate_comprehensive_query(self, page_name: str, subcategory_path: str):
+    def _navigate_comprehensive_query(self, page_name: str, subcategory_path: str,
+                                       category: Optional[str] = None):
         """
         综合查询页面内导航。
 
@@ -439,6 +440,7 @@ class Navigator:
         Args:
             page_name: 最终目标页面名称（如 "节点分配因子"）
             subcategory_path: 页面内导航路径（如 "供需与约束 > 参数信息"）
+            category: 侧边栏叶子节点名称（如 "综合查询"），用于顶部导航失败时重新打开页面
         """
         parts = [p.strip() for p in subcategory_path.split(">")]
         top_nav_name = parts[0]        # 顶部导航标签，如 "供需与约束"
@@ -459,9 +461,40 @@ class Navigator:
         except Exception as e:
             logger.error("点击顶部导航「%s」失败: %s", top_nav_name, e)
             self._save_debug_screenshot(f"comp_top_nav_{top_nav_name}_failed")
-            raise PlaywrightTimeout(
-                f"无法点击综合查询顶部导航「{top_nav_name}」"
-            )
+
+            # 页面可能已被系统刷新回首页，尝试重新点击侧边栏叶子节点打开综合查询页面
+            if category:
+                logger.warning(
+                    "疑似页面已刷新回首页，重新点击侧边栏「%s」后重试顶部导航...",
+                    category,
+                )
+                try:
+                    # 页面刷新后侧边栏状态已重置，需重新展开「信息披露」
+                    self._info_disclosure_expanded = False
+                    self._current_category = None
+                    self.navigate_to_info_disclosure()
+                    self._click_tree_leaf(category, timeout=15000)
+                    time.sleep(3)
+                    try:
+                        self.page.wait_for_load_state("networkidle", timeout=15000)
+                    except PlaywrightTimeout:
+                        pass
+                    tab = self._find_clickable_text(top_nav_name)
+                    tab.scroll_into_view_if_needed()
+                    time.sleep(0.3)
+                    tab.click()
+                    time.sleep(2)
+                    logger.info("重试成功：已点击顶部导航「%s」", top_nav_name)
+                except Exception as retry_e:
+                    logger.error("重试点击顶部导航「%s」仍失败: %s", top_nav_name, retry_e)
+                    self._save_debug_screenshot(f"comp_top_nav_{top_nav_name}_retry_failed")
+                    raise PlaywrightTimeout(
+                        f"无法点击综合查询顶部导航「{top_nav_name}」"
+                    )
+            else:
+                raise PlaywrightTimeout(
+                    f"无法点击综合查询顶部导航「{top_nav_name}」"
+                )
 
         # 等待页面内容更新
         try:

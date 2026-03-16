@@ -34,7 +34,7 @@ request:
   query_interval: 3         # 每次查询间隔（秒）
   date_interval: 0.2        # 日期迭代间隔（秒）
   retry_times: 3            # 失败重试次数
-  retry_interval: 5         # 重试间隔（秒）
+  retry_interval: 10         # 重试间隔（秒）
   export_timeout: 60        # 导出下载超时（秒）
 
 # 调度频率（通过命令行 --schedule 参数启用定时模式）
@@ -86,7 +86,7 @@ tasks:
     export_type: "原样导出"
 
   出清电价:
-    enabled: true
+    enabled: false
     category: "现货出清结果"
     has_export: true
     has_dropdown: false
@@ -172,7 +172,7 @@ tasks:
     export_type: "原样导出"
 
   实时联络线出力:
-    enabled: true
+    enabled: false
     category: "现货实时数据"
     has_export: true
     has_dropdown: true
@@ -182,7 +182,7 @@ tasks:
     export_type: "原样导出"
 
   96点电网运行实际值:
-    enabled: true
+    enabled: false
     category: "现货实时数据"
     has_export: true
     has_dropdown: false
@@ -266,7 +266,7 @@ tasks:
     export_type: "原样导出"
 
   日前必开必停机组:
-    enabled: true
+    enabled: false
     category: "现货日前信息"
     has_export: true
     has_dropdown: false
@@ -274,7 +274,7 @@ tasks:
     export_type: "原样导出"
 
   非市场化机组出力:
-    enabled: true
+    enabled: false
     category: "现货日前信息"
     has_export: true
     has_dropdown: false
@@ -282,7 +282,7 @@ tasks:
     export_type: "原样导出"
 
   检修总容量:
-    enabled: true
+    enabled: false
     category: "现货日前信息"
     has_export: true
     has_dropdown: false
@@ -290,7 +290,7 @@ tasks:
     export_type: "原样导出"
 
   开机不满72小时机组:
-    enabled: true
+    enabled: false
     category: "现货日前信息"
     has_export: true
     has_dropdown: false
@@ -298,7 +298,7 @@ tasks:
     export_type: "原样导出"
 
   省内负荷及联络线情况:
-    enabled: true
+    enabled: false
     category: "现货日前信息"
     has_export: true
     has_dropdown: false
@@ -306,7 +306,7 @@ tasks:
     export_type: "原样导出"
 
   新能源出力预测(场站申报）:
-    enabled: true
+    enabled: false
     category: "现货日前信息"
     has_export: true
     has_dropdown: false
@@ -314,7 +314,7 @@ tasks:
     export_type: "原样导出"
 
   日前各时段出清现货电量:
-    enabled: true
+    enabled: false
     category: "现货日前信息"
     has_export: true
     has_dropdown: false
