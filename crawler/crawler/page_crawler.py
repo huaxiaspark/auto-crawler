@@ -538,6 +538,7 @@ class PageCrawler:
         has_page_size = task_config.get("has_page_size", False)
         is_clearing_summary = "出清概况" in task_name
         export_all = task_config.get("export_all", False)
+        dropdown_skip_none = task_config.get("dropdown_skip_none", False)
 
         # 获取已爬取的日期（增量更新）
         # 含下拉且非 export_all 的任务，按“日期+下拉选项”粒度跳过，避免误判。
@@ -604,7 +605,6 @@ class PageCrawler:
         # 如果 export_all 为 True，则跳过下拉选项获取，导出按钮会一次导出全部数据
         dropdown_options = []
         dropdown_select_none = task_config.get("dropdown_select_none", False)
-        dropdown_skip_none = task_config.get("dropdown_skip_none", False)
         if has_dropdown and not export_all:
             self._ensure_content_frame()
             dropdown_options = self.filter_handler.get_dropdown_options(dropdown_label)
