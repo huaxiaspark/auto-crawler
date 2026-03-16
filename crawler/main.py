@@ -157,11 +157,11 @@ def run_crawler(config: dict, tasks: dict, start_date: str, end_date: str,
                 if loss_queries and task_name in loss_queries:
                     # 缺失补充模式：从 loss_queries 中提取该任务的查询参数
                     entries = loss_queries[task_name]
-                    if task_name == "日前联络线计划":
-                        # 含通道名称：转为 batch_queries 格式
+                    if task_config.get("dropdown_skip_none", False):
+                        # 含下拉筛选且跳过「不选」的任务：转为 batch_queries 格式（日期+筛选选项）
                         batch_queries = [(d, d, ch) for d, ch in entries if ch]
                         if not batch_queries:
-                            logger.warning("任务「%s」在 loss 文件中无有效通道记录，跳过", task_name)
+                            logger.warning("任务「%s」在 loss 文件中无有效筛选选项记录，跳过", task_name)
                             continue
                     else:
                         # 无通道名称：仅按日期列表爬取

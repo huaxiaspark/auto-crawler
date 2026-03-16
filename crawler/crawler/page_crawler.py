@@ -584,8 +584,8 @@ class PageCrawler:
             except Exception:
                 logger.warning("设置每页条数失败，使用默认值")
 
-        # 日前联络线计划：批量查询模式（日期+筛选条件由文件指定，不遍历全部下拉选项）
-        if task_name == "日前联络线计划" and batch_queries:
+        # 含下拉筛选且配置了 dropdown_skip_none 的任务：批量查询模式（日期+筛选条件由文件指定，不遍历全部下拉选项）
+        if dropdown_skip_none and batch_queries:
             self._crawl_task_tieline_batch(
                 task_name=task_name,
                 task_config=task_config,
@@ -604,6 +604,7 @@ class PageCrawler:
         # 如果 export_all 为 True，则跳过下拉选项获取，导出按钮会一次导出全部数据
         dropdown_options = []
         dropdown_select_none = task_config.get("dropdown_select_none", False)
+        dropdown_skip_none = task_config.get("dropdown_skip_none", False)
         if has_dropdown and not export_all:
             self._ensure_content_frame()
             dropdown_options = self.filter_handler.get_dropdown_options(dropdown_label)
@@ -660,7 +661,7 @@ class PageCrawler:
                 pending_exists = False
                 for option in dropdown_options:
                     normalized_option = (option or "").strip()
-                    if task_name == "日前联络线计划" and normalized_option == "不选":
+                    if dropdown_skip_none and normalized_option == "不选":
                         continue
                     if self._build_option_progress_key(option) not in completed_option_keys:
                         pending_exists = True
@@ -718,8 +719,8 @@ class PageCrawler:
                 # 对每个下拉选项迭代
                 for opt_idx, option in enumerate(dropdown_options):
                     normalized_option = (option or "").strip()
-                    # 仅「日前联络线计划」：若选项为「不选」则跳过本次执行
-                    if task_name == "日前联络线计划" and normalized_option == "不选":
+                    # 若配置了 dropdown_skip_none，跳过「不选」选项
+                    if dropdown_skip_none and normalized_option == "不选":
                         logger.info(
                             "  下拉选项 [%d/%d]: %s，按任务规则跳过",
                             opt_idx + 1,
@@ -787,17 +788,18 @@ class PageCrawler:
         is_clearing_summary: bool,
     ):
         """
-        日前联络线计划专用：按「日期+筛选条件」列表批量执行，不获取页面全部下拉选项。
-        batch_queries: [(start_date, end_date, 联络线名称), ...]
+        含下拉筛选且配置了 dropdown_skip_none 的任务专用：
+        按「日期+筛选条件」列表批量执行，不获取页面全部下拉选项。
+        batch_queries: [(start_date, end_date, 筛选选项名称), ...]
         """
         batch_pairs: List[Tuple[str, str]] = []
         for start_date, end_date, option in batch_queries:
             for date_str in self._generate_date_list(start_date, end_date):
                 batch_pairs.append((date_str, option))
         total = len(batch_pairs)
-        logger.info("批量模式：共 %d 个「日期+联络线」组合", total)
+        logger.info("批量模式：共 %d 个「日期+%s」组合", total, dropdown_label)
         for idx, (date_str, option) in enumerate(batch_pairs):
-            logger.info("[%d/%d] 日期: %s, 联络线: %s", idx + 1, total, date_str, option)
+            logger.info("[%d/%d] 日期: %s, %s: %s", idx + 1, total, date_str, dropdown_label, option)
             try:
                 self._ensure_content_frame()
                 self.filter_handler.set_date(date_str, quick_mode=False)

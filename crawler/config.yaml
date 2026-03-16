@@ -167,15 +167,17 @@ tasks:
     has_export: true
     has_dropdown: true
     dropdown_label: "机组名称"
+    dropdown_skip_none: true  # 下拉选项含「不选」时，跳过该选项，不执行查询
     has_pagination: false
     export_type: "原样导出"
 
-  实施联络线出力:
+  实时联络线出力:
     enabled: true
     category: "现货实时数据"
     has_export: true
     has_dropdown: true
     dropdown_label: "通道类型"
+    dropdown_skip_none: true  # 下拉选项含「不选」时，跳过该选项，不执行查询
     has_pagination: false
     export_type: "原样导出"
 
@@ -211,6 +213,7 @@ tasks:
     has_export: true
     has_dropdown: true
     dropdown_label: "联络线名称"
+    dropdown_skip_none: true  # 下拉选项含「不选」时，跳过该选项，不执行查询
     has_pagination: false
     export_type: "原样导出"
 
@@ -302,7 +305,7 @@ tasks:
     has_pagination: false
     export_type: "原样导出"
 
-  新能源出力预测(场站申报):
+  新能源出力预测(场站申报）:
     enabled: true
     category: "现货日前信息"
     has_export: true
