@@ -53,12 +53,18 @@ class DataExtractor:
             # 优先查找 FineReport 数据表格（class 包含 x-table 或 REPORT）
             fr_tables = soup.find_all("table", class_=re.compile(r"x-table|REPORT"))
             if fr_tables:
-                # 使用 FineReport 专用解析
+                # 使用 FineReport 专用解析（单表）
                 table = fr_tables[min(table_index, len(fr_tables) - 1)]
                 headers, rows = self._parse_finereport_table(table)
                 if headers:
                     logger.info("FineReport 表格提取完成: %d 列, %d 行",
                                 len(headers), len(rows))
+                    return headers, rows
+
+                # 单表解析失败，尝试合并所有 FineReport 表格
+                # （适用于冻结表头布局：表头和数据分布在不同 table 元素中）
+                headers, rows = self._parse_finereport_tables_combined(fr_tables)
+                if headers:
                     return headers, rows
 
             # 回退到标准表格解析
@@ -111,6 +117,71 @@ class DataExtractor:
         except Exception as e:
             logger.error("提取所有表格失败: %s", e)
             return []
+
+    def _parse_finereport_tables_combined(self, fr_tables) -> Tuple[List[str], List[Dict]]:
+        """
+        合并多个 FineReport <table> 元素的 tridx 行，统一解析。
+
+        适用于 FineReport「冻结表头」布局：表头行和数据行被拆分到不同的
+        <table> 元素中（如综合查询 > 水电（含抽蓄）总出力页面），
+        单表解析无法同时获取表头和数据。
+
+        处理逻辑：
+        1. 从所有 FineReport table 中收集带 tridx 属性且有实际单元格的行
+        2. 按 tridx 排序
+        3. 通过启发式方法区分信息行、表头行和数据行：
+           - 首个单元格为纯数字的行视为数据行
+           - 数据行之前的最后一个非数据行视为表头行
+           - 更早的行视为标题/信息行（如「最新更新日期」），跳过
+
+        Args:
+            fr_tables: 所有匹配 x-table/REPORT 的 table 元素列表
+
+        Returns:
+            (表头列表, 数据行字典列表)
+        """
+        all_rows_with_cells = []
+
+        for table in fr_tables:
+            for tr in table.find_all("tr", attrs={"tridx": True}):
+                cells = tr.find_all(["td", "th"], recursive=False)
+                if cells:
+                    tridx = int(tr.get("tridx", 0))
+                    all_rows_with_cells.append((tridx, cells))
+
+        if not all_rows_with_cells:
+            return [], []
+
+        all_rows_with_cells.sort(key=lambda x: x[0])
+
+        header_idx = -1
+        for i, (tridx, cells) in enumerate(all_rows_with_cells):
+            first_text = cells[0].get_text(strip=True)
+            if first_text.isdigit():
+                break
+            header_idx = i
+
+        if header_idx < 0:
+            return [], []
+
+        _, header_cells = all_rows_with_cells[header_idx]
+        headers = [c.get_text(strip=True) for c in header_cells]
+
+        if not headers:
+            return [], []
+
+        rows = []
+        for _, cells in all_rows_with_cells[header_idx + 1:]:
+            row_data = {}
+            for j, cell in enumerate(cells):
+                key = headers[j] if j < len(headers) else f"列{j + 1}"
+                row_data[key] = cell.get_text(strip=True)
+            if any(v for v in row_data.values()):
+                rows.append(row_data)
+
+        logger.info("FineReport 合并表格解析完成: %d 列, %d 行",
+                    len(headers), len(rows))
+        return headers, rows
 
     def _parse_finereport_table(self, table) -> Tuple[List[str], List[Dict]]:
         """
