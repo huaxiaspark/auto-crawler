@@ -309,7 +309,7 @@ validators:
   # 日前市场出清概况 - 日期一致性校验
   # ----------------------------------------------------------
   - name: "日前市场出清概况"
-    enabled: true
+    enabled: false
 
     file_pattern:
       prefix: "日前市场出清概况_"
@@ -485,10 +485,316 @@ validators:
   # 实时市场出清概况 - 日期一致性校验（CSV，位于现货出清结果子目录）
   # ----------------------------------------------------------
   - name: "实时市场出清概况"
-    enabled: true
+    enabled: false
 
     file_pattern:
       prefix: "实时市场出清概况_"
+      extensions: [".csv"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 实时联络线出力 - 按通道分文件（prefix_date_channel）
+  # ----------------------------------------------------------
+  - name: "实时联络线出力"
+    enabled: true
+
+    file_pattern:
+      prefix: "实时联络线出力_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date_channel"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 21
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: true
+        channel_header_keywords: ["通道"]
+
+    standard_channels:
+      - "过境送雁淮(省间现货)"
+      - "过境送雁淮(月计划)"
+      - "过境送长南(省间现货)"
+      - "过境送长南(月计划)"
+      - "河北负荷"
+      - "京津唐"
+      - "山西送河北(华北跨省)"
+      - "山西送河北(省间现货)"
+      - "山西送河北(月计划)"
+      - "山西送京津唐(华北跨省)"
+      - "山西送京津唐(省间现货)"
+      - "山西送京津唐(月计划)"
+      - "山西送锡泰(省间现货)"
+      - "山西送锡泰(月计划)"
+      - "山西送雁淮(省间现货)"
+      - "山西送雁淮(月计划)"
+      - "山西送长南(省间现货)"
+      - "山西送长南(月计划)"
+      - "特高压雁淮直流外送"
+      - "特高压长南线"
+      - "总加"
+
+    report_filters:
+      skip_error_types:
+        date: ["no_date_data"]
+        channel: []
+      skip_empty_channel_mismatch: true
+
+  # ----------------------------------------------------------
+  # 实时市场机组出力及电价 - 按机组分文件（机组名称固定）
+  # ----------------------------------------------------------
+  - name: "实时市场机组出力及电价"
+    enabled: true
+
+    file_pattern:
+      prefix: "实时市场机组出力及电价_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date_channel"
+
+    checks:
+      completeness:
+        enabled: true
+        # 不填 expected_count 时自动取 len(standard_channels)，仅维护下方 standard_channels 即可
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: true
+        channel_header_keywords: ["机组名称", "机组"]
+
+    # 固定机组列表（与爬虫页「机组名称」下拉选项一致，可随平台补充）
+    standard_channels:
+      - "达木河二期"
+      - "达木河风电场1#"
+
+    report_filters:
+      skip_error_types:
+        date: ["no_date_data"]
+        channel: []
+      skip_empty_channel_mismatch: true
+
+  # ----------------------------------------------------------
+  # 96点电网运行实际值 - 日期一致性校验
+  # ----------------------------------------------------------
+  - name: "96点电网运行实际值"
+    enabled: true
+
+    file_pattern:
+      prefix: "96点电网运行实际值_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 出清电价 - 日期一致性校验
+  # ----------------------------------------------------------
+  - name: "出清电价"
+    enabled: true
+
+    file_pattern:
+      prefix: "出清电价_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 检修总容量 - 日期一致性校验
+  # ----------------------------------------------------------
+  - name: "检修总容量"
+    enabled: true
+
+    file_pattern:
+      prefix: "检修总容量_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 日前必开必停机组 - 日期一致性校验
+  # ----------------------------------------------------------
+  - name: "日前必开必停机组"
+    enabled: true
+
+    file_pattern:
+      prefix: "日前必开必停机组_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 日前各时段出清现货电量 - 日期一致性校验
+  # ----------------------------------------------------------
+  - name: "日前各时段出清现货电量"
+    enabled: true
+
+    file_pattern:
+      prefix: "日前各时段出清现货电量_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 开机不满72小时机组 - 日期一致性校验
+  # ----------------------------------------------------------
+  - name: "开机不满72小时机组"
+    enabled: true
+
+    file_pattern:
+      prefix: "开机不满72小时机组_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 新能源出力预测(场站申报） - 日期一致性校验
+  # ----------------------------------------------------------
+  - name: "新能源出力预测(场站申报）"
+    enabled: true
+
+    file_pattern:
+      prefix: "新能源出力预测(场站申报）_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 非市场化机组出力 - 日期一致性校验
+  # ----------------------------------------------------------
+  - name: "非市场化机组出力"
+    enabled: true
+
+    file_pattern:
+      prefix: "非市场化机组出力_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 省内负荷及联络线情况 - 日期一致性校验
+  # ----------------------------------------------------------
+  - name: "省内负荷及联络线情况"
+    enabled: true
+
+    file_pattern:
+      prefix: "省内负荷及联络线情况_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 水电_含抽蓄_总出力 - 日期一致性校验（CSV，位于综合查询子目录）
+  # ----------------------------------------------------------
+  - name: "水电_含抽蓄_总出力"
+    enabled: true
+
+    file_pattern:
+      prefix: "水电_含抽蓄_总出力_"
       extensions: [".csv"]
       name_format: "prefix_date"
 
