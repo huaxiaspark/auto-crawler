@@ -61,8 +61,24 @@ class CsvStorage:
             filename = self._build_filename(task_name, date_str, extra_label)
             filepath = os.path.join(save_dir, filename)
 
-            # 转换为 DataFrame 并保存
+            # 转换为 DataFrame
             df = pd.DataFrame(data)
+
+            # 针对带「序号」列的标准明细表做一次轻量清洗，
+            # 过滤掉解析过程中混入的非数据行（如「最新更新日期」说明行）。
+            if "序号" in df.columns:
+                try:
+                    seq = pd.to_numeric(df["序号"], errors="coerce")
+                    # 仅保留序号为有效数字的行，其余视为噪声行丢弃
+                    df = df.loc[seq.notna()].copy()
+                    df["序号"] = seq.loc[seq.notna()].astype(int)
+                except Exception:
+                    # 清洗失败时保持原始数据，避免影响其它页面
+                    pass
+
+            # 丢弃完全为空的列（常见于表头/说明行被误解析出的临时列）
+            df = df.dropna(axis=1, how="all")
+
             df.to_csv(filepath, index=False, encoding=self.encoding)
 
             logger.info("数据已保存: %s (%d 行, %d 列)",
