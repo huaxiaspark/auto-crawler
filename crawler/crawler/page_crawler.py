@@ -1120,7 +1120,7 @@ class PageCrawler:
         # 7. 数据清洗
         all_data = self._clean_data(all_data)
 
-        # 8. 添加更新时间
+        # 8. 添加更新时间--（如果不需要，删除即可）
         update_time = self.extractor.extract_update_time()
         if update_time:
             for row in all_data:
