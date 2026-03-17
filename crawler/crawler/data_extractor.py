@@ -143,7 +143,8 @@ class DataExtractor:
         # 第一行（tridx 最小）作为表头
         if all_rows:
             header_row = all_rows[0]
-            for cell in header_row.find_all(["td", "th"]):
+            # 仅提取当前行的直接单元格，避免把嵌套 table 的 td/th 一并拉平导致列数异常
+            for cell in header_row.find_all(["td", "th"], recursive=False):
                 text = cell.get_text(strip=True)
                 headers.append(text)
 
@@ -152,7 +153,8 @@ class DataExtractor:
 
         # 其余行作为数据行
         for tr in all_rows[1:]:
-            cells = tr.find_all(["td", "th"])
+            # 仅提取直接单元格，避免嵌套表格造成错位/爆列
+            cells = tr.find_all(["td", "th"], recursive=False)
             if not cells:
                 continue
             row_data = {}
@@ -184,14 +186,15 @@ class DataExtractor:
         if thead:
             header_row = thead.find("tr")
             if header_row:
-                for th in header_row.find_all(["th", "td"]):
+                # 仅提取直接表头单元格，避免嵌套 table 造成表头爆列
+                for th in header_row.find_all(["th", "td"], recursive=False):
                     text = th.get_text(strip=True)
                     headers.append(text)
         else:
             # 没有 thead，尝试第一行作为表头
             first_row = table.find("tr")
             if first_row:
-                cells = first_row.find_all(["th", "td"])
+                cells = first_row.find_all(["th", "td"], recursive=False)
                 for cell in cells:
                     text = cell.get_text(strip=True)
                     headers.append(text)
@@ -204,7 +207,8 @@ class DataExtractor:
         data_rows = tbody.find_all("tr") if tbody else table.find_all("tr")[1:]
 
         for tr in data_rows:
-            cells = tr.find_all(["td", "th"])
+            # 仅提取当前 tr 的直接 td/th，避免嵌套 table 导致列数异常
+            cells = tr.find_all(["td", "th"], recursive=False)
             if len(cells) == 0:
                 continue
 
