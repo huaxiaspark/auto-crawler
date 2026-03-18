@@ -157,7 +157,7 @@ class CsvStorage:
             安全的文件名
         """
         # 保留中文、字母、数字、连字符、下划线
-        safe = re.sub(r'[^\w\u4e00-\u9fff\-]', '_', name)
+        safe = re.sub(r'[^\w\u4e00-\u9fff\uff08\uff09\-]', '_', name)
         # 合并连续下划线
         safe = re.sub(r'_+', '_', safe)
         return safe.strip("_")

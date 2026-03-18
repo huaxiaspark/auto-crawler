@@ -91,6 +91,10 @@ def run(object_name: str, md5: str, date_range: dict, categories: list, config: 
     if config["processor"].get("cleanup_after_upload", True):
         uploader.cleanup_dir(data_dir)
         uploader.cleanup_dir(output_dir)
+        # 同步清理 cache 中对应的 tar 文件
+        if os.path.exists(tar_path):
+            os.remove(tar_path)
+            logger.info(f"已清理 cache 文件：{tar_path}")
 
     # Step 4: 通知三方平台
     payload = {

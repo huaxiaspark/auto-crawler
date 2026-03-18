@@ -379,7 +379,7 @@ tasks:
     output_dir: 检修总容量
     output_file: 检修总容量
 
-  - name: 水电_含抽蓄_总出力
+  - name: 水电（含抽蓄）总出力
     type: timeseries_csv
     file_encoding: utf-8
     header_row: 0
@@ -387,8 +387,8 @@ tasks:
     time_col: 时点
     value_col_names:
       - 水电实际值(MW)
-    output_dir: 水电_含抽蓄_总出力
-    output_file: 水电_含抽蓄_总出力
+    output_dir: 水电（含抽蓄）总出力
+    output_file: 水电（含抽蓄）总出力
 
   - name: 省内负荷及联络线情况
     type: timeseries_multicol

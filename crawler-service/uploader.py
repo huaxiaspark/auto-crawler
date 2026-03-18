@@ -34,8 +34,13 @@ def pack_and_upload(source_dir: str, object_name: str, config: dict) -> tuple:
     with tempfile.NamedTemporaryFile(suffix=".tar.gz", delete=False) as tmp:
         tmp_path = tmp.name
     try:
+        def _exclude_meta(tarinfo):
+            if os.path.basename(tarinfo.name) == "_channels_meta.json":
+                return None
+            return tarinfo
+
         with tarfile.open(tmp_path, "w:gz") as tar:
-            tar.add(source_dir, arcname=os.path.basename(source_dir))
+            tar.add(source_dir, arcname=os.path.basename(source_dir), filter=_exclude_meta)
 
         size_bytes = os.path.getsize(tmp_path)
         md5 = _md5_file(tmp_path)
