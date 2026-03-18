@@ -8,6 +8,8 @@
     导航后需检测 iframe 并切换到其 Frame 上下文，否则无法找到任何控件。
 """
 
+import json
+import os
 import re
 import time
 from datetime import datetime, timedelta
@@ -454,6 +456,68 @@ class PageCrawler:
             logger.error("页面恢复导航失败: %s", e)
             raise
 
+    # ── 动态下拉列表支持 ──────────────────────────────────────────
+
+    def _wait_for_dropdown_refresh(self, dropdown_label: str, max_wait: float = 5.0):
+        """
+        等待下拉列表在日期切换后刷新完成。
+
+        日前联络线计划、实时联络线出力、实时市场机组出力及电价三个页面，
+        设置日期后会自动触发下拉列表数据刷新。需要等待刷新完成后再获取选项。
+
+        Args:
+            dropdown_label: 下拉框标签（用于日志）
+            max_wait: 最大等待秒数
+        """
+        try:
+            self.filter_handler.ctx.wait_for_load_state(
+                "networkidle", timeout=int(max_wait * 1000)
+            )
+        except Exception:
+            pass
+        time.sleep(1)
+        logger.debug("下拉列表「%s」刷新等待完成", dropdown_label)
+
+    def _get_channels_meta_path(self) -> str:
+        """获取通道元数据文件路径"""
+        download_dir = os.path.abspath(
+            self.config.get("browser", {}).get("download_dir", "./data/exports")
+        )
+        return os.path.join(download_dir, "_channels_meta.json")
+
+    def _save_channels_meta(self, task_name: str, date_str: str,
+                            channels: List[str]):
+        """
+        将某任务某日期实际获取到的下拉选项列表写入元数据文件。
+
+        元数据文件供 data-verify 校验侧使用，替代硬编码的 standard_channels。
+
+        Args:
+            task_name: 任务名称
+            date_str: 日期字符串
+            channels: 该日期下实际的下拉选项列表
+        """
+        meta_path = self._get_channels_meta_path()
+        os.makedirs(os.path.dirname(meta_path), exist_ok=True)
+
+        meta = {}
+        if os.path.exists(meta_path):
+            try:
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    meta = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                logger.warning("元数据文件读取失败，将重新创建: %s", meta_path)
+
+        if task_name not in meta:
+            meta[task_name] = {}
+        meta[task_name][date_str] = channels
+
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+
+        logger.debug("已保存通道元数据: %s / %s → %d 个选项",
+                     task_name, date_str, len(channels))
+
     # ── 主流程 ────────────────────────────────────────────────────
 
     @staticmethod
@@ -539,6 +603,7 @@ class PageCrawler:
         is_clearing_summary = "出清概况" in task_name
         export_all = task_config.get("export_all", False)
         dropdown_skip_none = task_config.get("dropdown_skip_none", False)
+        dropdown_refresh_on_date = task_config.get("dropdown_refresh_on_date", False)
 
         # 获取已爬取的日期（增量更新）
         # 含下拉且非 export_all 的任务，按“日期+下拉选项”粒度跳过，避免误判。
@@ -603,9 +668,10 @@ class PageCrawler:
 
         # 获取下拉选项（先确保 iframe 上下文有效）
         # 如果 export_all 为 True，则跳过下拉选项获取，导出按钮会一次导出全部数据
+        # 如果 dropdown_refresh_on_date 为 True，则延迟到每个日期设置后再获取
         dropdown_options = []
         dropdown_select_none = task_config.get("dropdown_select_none", False)
-        if has_dropdown and not export_all:
+        if has_dropdown and not export_all and not dropdown_refresh_on_date:
             self._ensure_content_frame()
             dropdown_options = self.filter_handler.get_dropdown_options(dropdown_label)
             if not dropdown_options:
@@ -634,6 +700,9 @@ class PageCrawler:
         elif export_all:
             logger.info("任务「%s」启用了 export_all 模式，跳过下拉选项获取，"
                         "将通过导出按钮一次性导出所有数据", task_name)
+        elif dropdown_refresh_on_date:
+            logger.info("任务「%s」启用了 dropdown_refresh_on_date，"
+                        "将在每个日期设置后重新获取下拉选项", task_name)
 
         # 日期迭代
         if date_list is None:
@@ -715,6 +784,78 @@ class PageCrawler:
                     category=category,
                     export_type=export_type,
                 )
+            elif has_dropdown and dropdown_refresh_on_date:
+                # ★ 动态下拉列表模式：每个日期设置后重新获取下拉选项
+                self._ensure_content_frame()
+                self._wait_for_dropdown_refresh(dropdown_label)
+                dropdown_options = self.filter_handler.get_dropdown_options(dropdown_label)
+                if not dropdown_options:
+                    logger.warning("[%d/%d] 日期 %s 未获取到「%s」的下拉选项，跳过",
+                                   date_idx + 1, total_dates, date_str, dropdown_label)
+                    time.sleep(self.date_interval)
+                    continue
+
+                # 过滤掉「不选」
+                effective_options = [
+                    opt for opt in dropdown_options
+                    if not (dropdown_skip_none and (opt or "").strip() == "不选")
+                ]
+
+                logger.info("[%d/%d] 日期 %s 下拉选项: %d 个（有效 %d 个）",
+                            date_idx + 1, total_dates, date_str,
+                            len(dropdown_options), len(effective_options))
+
+                # 保存当前日期的通道元数据（供 data-verify 使用）
+                self._save_channels_meta(task_name, date_str, effective_options)
+
+                # 获取已完成的选项键
+                completed_option_keys = self._get_completed_option_keys_for_date(
+                    task_name=task_name,
+                    date_str=date_str,
+                    category=category,
+                    has_export=has_export,
+                )
+
+                # 检查是否所有选项都已完成
+                pending_options = [
+                    opt for opt in effective_options
+                    if self._build_option_progress_key(opt) not in completed_option_keys
+                ]
+                if not pending_options:
+                    logger.info("[%d/%d] 跳过已完成日期: %s（下拉选项均已存在）",
+                                date_idx + 1, total_dates, date_str)
+                    time.sleep(self.date_interval)
+                    continue
+
+                # 对每个下拉选项迭代
+                for opt_idx, option in enumerate(effective_options):
+                    option_key = self._build_option_progress_key(option)
+                    if option_key in completed_option_keys:
+                        logger.info(
+                            "  下拉选项 [%d/%d]: %s，已完成，跳过",
+                            opt_idx + 1,
+                            len(effective_options),
+                            option or "(默认)",
+                        )
+                        continue
+
+                    logger.info("  下拉选项 [%d/%d]: %s",
+                                opt_idx + 1, len(effective_options), option or "(默认)")
+                    success = self._crawl_single(
+                        task_name=task_name,
+                        task_config=task_config,
+                        date_str=date_str,
+                        category=category,
+                        dropdown_label=dropdown_label,
+                        dropdown_value=option,
+                        has_export=has_export,
+                        export_type=export_type,
+                        has_pagination=has_pagination,
+                        is_clearing_summary=is_clearing_summary,
+                        date_already_set=True,
+                    )
+                    if success:
+                        completed_option_keys.add(option_key)
             elif has_dropdown and dropdown_options:
                 # 对每个下拉选项迭代
                 for opt_idx, option in enumerate(dropdown_options):

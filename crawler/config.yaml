@@ -168,6 +168,7 @@ tasks:
     has_dropdown: true
     dropdown_label: "机组名称"
     dropdown_skip_none: true  # 下拉选项含「不选」时，跳过该选项，不执行查询
+    dropdown_refresh_on_date: true  # 设置日期后下拉列表会自动刷新，每个日期需重新获取选项
     has_pagination: false
     export_type: "原样导出"
 
@@ -178,6 +179,7 @@ tasks:
     has_dropdown: true
     dropdown_label: "通道类型"
     dropdown_skip_none: true  # 下拉选项含「不选」时，跳过该选项，不执行查询
+    dropdown_refresh_on_date: true  # 设置日期后下拉列表会自动刷新，每个日期需重新获取选项
     has_pagination: false
     export_type: "原样导出"
 
@@ -214,6 +216,7 @@ tasks:
     has_dropdown: true
     dropdown_label: "联络线名称"
     dropdown_skip_none: true  # 下拉选项含「不选」时，跳过该选项，不执行查询
+    dropdown_refresh_on_date: true  # 设置日期后下拉列表会自动刷新，每个日期需重新获取选项
     has_pagination: false
     export_type: "原样导出"
 

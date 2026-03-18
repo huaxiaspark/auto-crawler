@@ -40,7 +40,7 @@ global:
 validators:
 
   # ----------------------------------------------------------
-  # 日前联络线计划 - 专项校验（含通道完整性）
+  # 日前联络线计划 - 专项校验（含通道完整性，动态通道模式）
   # ----------------------------------------------------------
   - name: "日前联络线计划"
     enabled: true
@@ -55,10 +55,11 @@ validators:
 
     # 校验项目
     checks:
-      # 文件完整性：每个日期必须有指定数量的文件（每通道一个）
+      # 文件完整性：从元数据文件动态获取每日期的通道列表
       completeness:
         enabled: true
-        expected_count: 22  # 每个日期期望的文件数量
+        dynamic_channels: true
+        channels_meta_file: "../crawler/data/exports/_channels_meta.json"
 
       # 文件名日期与表格内日期一致性
       date_consistency:
@@ -71,33 +72,10 @@ validators:
       # 文件名通道与表格内通道一致性
       channel_consistency:
         enabled: true
+        dynamic_channels: true
+        channels_meta_file: "../crawler/data/exports/_channels_meta.json"
         # 表格中通道列的表头关键词
         channel_header_keywords: ["通道"]
-
-    # 标准通道列表（完整性校验和通道一致性校验均使用此列表）
-    standard_channels:
-      - "过境送雁淮(省间现货)"
-      - "过境送雁淮(月计划)"
-      - "过境送长南(省间现货)"
-      - "过境送长南(月计划)"
-      - "河北负荷"
-      - "华北负荷"
-      - "京津唐"
-      - "山西送河北(华北跨省)"
-      - "山西送河北(省间现货)"
-      - "山西送河北(月计划)"
-      - "山西送京津唐(华北跨省)"
-      - "山西送京津唐(省间现货)"
-      - "山西送京津唐(月计划)"
-      - "山西送锡泰(省间现货)"
-      - "山西送锡泰(月计划)"
-      - "山西送雁淮(省间现货)"
-      - "山西送雁淮(月计划)"
-      - "山西送长南(省间现货)"
-      - "山西送长南(月计划)"
-      - "特高压雁淮直流外送"
-      - "特高压长南线"
-      - "总加"
 
     # 报告过滤规则（哪些错误类型不输出到报告）
     report_filters:
@@ -517,37 +495,17 @@ validators:
     checks:
       completeness:
         enabled: true
-        expected_count: 21
+        dynamic_channels: true
+        channels_meta_file: "../crawler/data/exports/_channels_meta.json"
       date_consistency:
         enabled: true
         date_header_keywords: ["日期", "时间"]
         date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
       channel_consistency:
         enabled: true
+        dynamic_channels: true
+        channels_meta_file: "../crawler/data/exports/_channels_meta.json"
         channel_header_keywords: ["通道"]
-
-    standard_channels:
-      - "过境送雁淮(省间现货)"
-      - "过境送雁淮(月计划)"
-      - "过境送长南(省间现货)"
-      - "过境送长南(月计划)"
-      - "河北负荷"
-      - "京津唐"
-      - "山西送河北(华北跨省)"
-      - "山西送河北(省间现货)"
-      - "山西送河北(月计划)"
-      - "山西送京津唐(华北跨省)"
-      - "山西送京津唐(省间现货)"
-      - "山西送京津唐(月计划)"
-      - "山西送锡泰(省间现货)"
-      - "山西送锡泰(月计划)"
-      - "山西送雁淮(省间现货)"
-      - "山西送雁淮(月计划)"
-      - "山西送长南(省间现货)"
-      - "山西送长南(月计划)"
-      - "特高压雁淮直流外送"
-      - "特高压长南线"
-      - "总加"
 
     report_filters:
       skip_error_types:
@@ -556,7 +514,7 @@ validators:
       skip_empty_channel_mismatch: true
 
   # ----------------------------------------------------------
-  # 实时市场机组出力及电价 - 按机组分文件（机组名称固定）
+  # 实时市场机组出力及电价 - 按机组分文件（动态通道模式）
   # ----------------------------------------------------------
   - name: "实时市场机组出力及电价"
     enabled: true
@@ -569,19 +527,17 @@ validators:
     checks:
       completeness:
         enabled: true
-        # 不填 expected_count 时自动取 len(standard_channels)，仅维护下方 standard_channels 即可
+        dynamic_channels: true
+        channels_meta_file: "../crawler/data/exports/_channels_meta.json"
       date_consistency:
         enabled: true
         date_header_keywords: ["日期", "时间"]
         date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
       channel_consistency:
         enabled: true
+        dynamic_channels: true
+        channels_meta_file: "../crawler/data/exports/_channels_meta.json"
         channel_header_keywords: ["机组名称", "机组"]
-
-    # 固定机组列表（与爬虫页「机组名称」下拉选项一致，可随平台补充）
-    standard_channels:
-      - "达木河二期"
-      - "达木河风电场1#"
 
     report_filters:
       skip_error_types:

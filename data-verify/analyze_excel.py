@@ -16,6 +16,7 @@ Excel文件分析与数据校验系统
 """
 
 import argparse
+import json
 import logging
 import os
 import re
@@ -28,7 +29,7 @@ from pathlib import Path
 
 import pandas as pd
 import yaml
-from typing import Optional
+from typing import List, Optional
 
 
 _LOG_FMT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -419,15 +420,82 @@ def _read_raw_channel_value(filepath: str, channel_keywords: list, max_rows: int
     return None
 
 
+# ============================================================
+# 动态通道元数据加载
+# ============================================================
+
+_channels_meta_cache: dict = {}
+
+
+def _resolve_meta_path(meta_path: str) -> str:
+    """将元数据文件的相对路径解析为绝对路径（相对于本脚本所在目录）"""
+    if meta_path and not os.path.isabs(meta_path):
+        return os.path.join(os.path.dirname(os.path.abspath(__file__)), meta_path)
+    return meta_path
+
+
+def _load_dynamic_channels(meta_path: str, task_name: str,
+                           target_date: str) -> Optional[List[str]]:
+    """
+    从元数据文件加载指定任务指定日期的通道/机组列表。
+
+    Args:
+        meta_path: 元数据 JSON 文件路径（可为相对路径）
+        task_name: 任务名称（如 "日前联络线计划"）
+        target_date: 日期字符串（YYYY-MM-DD）
+
+    Returns:
+        通道列表，None 表示元数据中无此日期记录
+    """
+    abs_path = _resolve_meta_path(meta_path)
+    if not abs_path or not os.path.exists(abs_path):
+        return None
+
+    if abs_path not in _channels_meta_cache:
+        try:
+            with open(abs_path, "r", encoding="utf-8") as f:
+                _channels_meta_cache[abs_path] = json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            logging.warning("读取通道元数据文件失败 [%s]: %s", abs_path, e)
+            return None
+
+    meta = _channels_meta_cache[abs_path]
+    task_meta = meta.get(task_name, {})
+    return task_meta.get(target_date)
+
+
 def check_completeness(files: list, target_date: str, validator_cfg: dict) -> tuple:
     """检查指定日期的文件完整性（文件数量 / 通道覆盖）
 
     files: 已完成内容校验并清理后的剩余文件列表（由调用方传入 remaining_files）
+
+    支持两种模式：
+    - 静态模式：使用 standard_channels 硬编码列表
+    - 动态模式：从元数据文件按日期加载通道列表（dynamic_channels: true）
     """
-    standard_channels = validator_cfg.get('standard_channels', [])
+    completeness_cfg = validator_cfg['checks']['completeness']
     name_format = validator_cfg['file_pattern'].get('name_format', 'prefix_date')
+
+    # 确定 standard_channels：动态模式从元数据加载，静态模式从配置读取
+    standard_channels = validator_cfg.get('standard_channels', [])
+    if completeness_cfg.get('dynamic_channels'):
+        meta_path = completeness_cfg.get('channels_meta_file', '')
+        task_name = validator_cfg['name']
+        dynamic = _load_dynamic_channels(meta_path, task_name, target_date)
+        if dynamic is None:
+            # 元数据中无此日期记录，跳过完整性校验
+            date_files = [f for f in files if f['date'] == target_date]
+            return True, {
+                'date': target_date,
+                'total_files': len(date_files),
+                'expected_count': 0,
+                'missing_channels': [],
+                'duplicate_channels': [],
+            }
+        standard_channels = dynamic
+
     default_expected = len(standard_channels) if name_format == 'prefix_date_channel' else 1
-    expected = validator_cfg['checks']['completeness'].get('expected_count', default_expected)
+    expected = completeness_cfg.get('expected_count', default_expected)
 
     date_files = [f for f in files if f['date'] == target_date]
 
@@ -663,8 +731,13 @@ def run_validator(validator_cfg: dict, cfg: dict, target_dates: list):
     name = validator_cfg['name']
     directory = cfg['global']['data_directory']
     checks = validator_cfg.get('checks', {})
-    standard_channels = validator_cfg.get('standard_channels', [])
+    static_channels = validator_cfg.get('standard_channels', [])
     filters = validator_cfg.get('report_filters', {})
+
+    # 通道一致性校验是否使用动态通道
+    cc_cfg = checks.get('channel_consistency', {})
+    channel_dynamic = cc_cfg.get('dynamic_channels', False)
+    channel_meta_path = cc_cfg.get('channels_meta_file', '')
 
     print(f"\n{'=' * 80}")
     print(f"校验对象: {name}")
@@ -688,8 +761,18 @@ def run_validator(validator_cfg: dict, cfg: dict, target_dates: list):
             if checks.get('date_consistency', {}).get('enabled'):
                 date_ok, date_reason = check_date_consistency(f, cfg)
 
-            if checks.get('channel_consistency', {}).get('enabled') and standard_channels:
-                channel_ok, channel_reason = check_channel_consistency(f, standard_channels, cfg)
+            if checks.get('channel_consistency', {}).get('enabled'):
+                # 动态通道模式：按文件日期从元数据加载通道列表
+                if channel_dynamic:
+                    file_date = f.get('date', '')
+                    standard_channels = _load_dynamic_channels(channel_meta_path, name, file_date)
+                    if standard_channels is None:
+                        standard_channels = []
+                else:
+                    standard_channels = static_channels
+
+                if standard_channels:
+                    channel_ok, channel_reason = check_channel_consistency(f, standard_channels, cfg)
 
             if not date_ok or not channel_ok:
                 combined_errors.append({
