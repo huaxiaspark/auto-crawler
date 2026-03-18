@@ -343,8 +343,8 @@ tasks:
       - 电力值
       - 风电
       - 光伏
-    output_dir: 新能源出力预测_场站申报
-    output_file: 新能源出力预测_场站申报
+    output_dir: 新能源出力预测(场站申报）
+    output_file: 新能源出力预测(场站申报）
 
   - name: 日前各时段出清现货电量
     type: clearing_quantity
