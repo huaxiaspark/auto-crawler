@@ -30,6 +30,19 @@ value_maps:
     不确定: 2
     其他: 3
 
+  must_run_status:                         # 必开必停状态
+    必停: 0
+    必开: 1
+    其他: 2
+
+  must_run_reason:                         # 必开必停原因
+    供热必开: 0
+    临时检修必停: 1
+    计划检修必停: 2
+    事故停运: 3
+    其他原因必停: 4
+    其他: 5
+
 # ── 二次调频时段偏移 ──────────────────────────────────────
 # 时段编号 -> [小时, 分钟]，5 时段/天
 secondary_freq_period_offsets:
@@ -253,3 +266,146 @@ tasks:
     value_col: 发电量
     output_dir: 机组实际发电曲线
     output_file: 机组实际发电曲线
+
+  # ── 以下为自动补齐的缺失任务 ─────────────────────────────────
+
+  - name: 96点电网运行实际值
+    type: timeseries_multicol
+    skip_rows: 2
+    columns: [序号, 日期, 时点, 系统负荷实际值, 外送实际值, 风电实际值, 光伏实际值, 风光总加实际值, 水电实际值, 频率实际值, 实际上旋备用, 实际下旋备用, 非市场化机组实际出力]
+    value_col_names:
+      - 系统负荷实际值
+      - 外送实际值
+      - 风电实际值
+      - 光伏实际值
+      - 风光总加实际值
+      - 水电实际值
+      - 频率实际值
+      - 实际上旋备用
+      - 实际下旋备用
+      - 非市场化机组实际出力
+    output_dir: 96点电网运行实际值
+    output_file: 96点电网运行实际值
+
+  - name: 出清电价
+    type: timeseries_multicol
+    skip_rows: 1
+    columns: [序号, 日期, 时点, 实时出清价格, 日前出清价格]
+    value_col_names:
+      - 实时出清价格
+      - 日前出清价格
+    output_dir: 出清电价
+    output_file: 出清电价
+
+  - name: 实时市场机组电力
+    type: channel_numeric
+    data_dir: 实时市场机组出力及电价
+    skip_rows: 2
+    columns: [序号, 机组名称, 日期, 时点, 电力, 电价]
+    name_col: 机组名称
+    value_col: 电力
+    output_dir: 实时市场机组出力及电价
+    output_file: 实时市场机组电力
+
+  - name: 实时市场机组电价
+    type: channel_numeric
+    data_dir: 实时市场机组出力及电价
+    skip_rows: 2
+    columns: [序号, 机组名称, 日期, 时点, 电力, 电价]
+    name_col: 机组名称
+    value_col: 电价
+    output_dir: 实时市场机组出力及电价
+    output_file: 实时市场机组电价
+
+  - name: 实时联络线电力
+    type: channel_numeric
+    data_dir: 实时联络线出力
+    skip_rows: 2
+    columns: [序号, 通道, 日期, 时点, 电力]
+    name_col: 通道
+    value_col: 电力
+    output_dir: 实时联络线出力
+    output_file: 实时联络线电力
+
+  - name: 开机不满72小时机组
+    type: tabular_date
+    skip_rows: 2
+    columns: [序号, 日期, 机组名称]
+    output_col_names: [机组名称]
+    output_dir: 开机不满72小时机组
+    output_file: 开机不满72小时机组
+
+  - name: 新能源出力预测(场站申报）
+    type: timeseries_multicol
+    skip_rows: 2
+    columns: [序号, 日期, 时点, 电力值, 风电, 光伏]
+    value_col_names:
+      - 电力值
+      - 风电
+      - 光伏
+    output_dir: 新能源出力预测_场站申报
+    output_file: 新能源出力预测_场站申报
+
+  - name: 日前各时段出清现货电量
+    type: clearing_quantity
+    skip_rows: 3
+    columns: [序号, 日期, 时点, 出清现货电量]
+    output_dir: 日前各时段出清现货电量
+    output_file: 日前各时段出清现货电量
+
+  - name: 日前必开必停机组
+    type: unit_date_mapped
+    skip_rows: 2
+    columns: [序号, 机组名称, 日期, 机组状态, 原因]
+    date_col: 日期
+    name_col: 机组名称
+    mapped_outputs:
+      - col: 机组状态
+        value_map: must_run_status
+        output_file: 日前必开必停机组_机组状态
+        mapping_file: 机组状态映射.csv
+      - col: 原因
+        value_map: must_run_reason
+        output_file: 日前必开必停机组_原因
+        mapping_file: 原因映射.csv
+    output_dir: 日前必开必停机组
+
+  - name: 检修总容量
+    type: timeseries_multicol
+    skip_rows: 2
+    columns: [序号, 日期, 时点, 检修容量]
+    value_col_names:
+      - 检修容量
+    output_dir: 检修总容量
+    output_file: 检修总容量
+
+  - name: 水电_含抽蓄_总出力
+    type: timeseries_csv
+    file_encoding: utf-8
+    header_row: 0
+    date_col: 日期
+    time_col: 时点
+    value_col_names:
+      - 水电实际值(MW)
+    output_dir: 水电_含抽蓄_总出力
+    output_file: 水电_含抽蓄_总出力
+
+  - name: 省内负荷及联络线情况
+    type: timeseries_multicol
+    skip_rows: 2
+    columns: [序号, 日期, 时点, 日前联络线电力值, 省内负荷预测电力值, 总加电力值]
+    value_col_names:
+      - 日前联络线电力值
+      - 省内负荷预测电力值
+      - 总加电力值
+    output_dir: 省内负荷及联络线情况
+    output_file: 省内负荷及联络线情况
+
+  - name: 非市场化机组出力
+    type: timeseries_multicol
+    skip_rows: 2
+    columns: [序号, 日期, 时点, 非市场化机组出力]
+    value_col_names:
+      - 非市场化机组出力
+    output_dir: 非市场化机组出力
+    output_file: 非市场化机组出力

@@ -808,6 +808,173 @@ def process_unit_generation_curve(input_dir: Path, task: dict) -> None:
     logging.info("已输出: %s", out_dir)
 
 
+def process_unit_date_mapped(input_dir: Path, task: dict) -> None:
+    """日期制机组状态表：多个文本列分别映射为数值后 pivot 为宽表（无时点列）"""
+    out_dir = ensure_output_dir(task["output_dir"])
+    cols = task["columns"]
+    skip = task.get("skip_rows", 2)
+    date_col = task.get("date_col", "日期")
+    name_col = task["name_col"]
+    mapped_outputs = task.get("mapped_outputs", [])
+    all_data = []
+
+    for f in sorted(input_dir.glob("*.xlsx")):
+        try:
+            df = pd.read_excel(f, header=None)
+            if df.shape[0] <= skip:
+                continue
+            df = df.iloc[skip:].copy()
+            df.columns = cols[: df.shape[1]]
+            df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+            df = df.dropna(subset=[date_col, name_col])
+            df["timestamp"] = df[date_col].apply(extract_date_000)
+            df = df[df["timestamp"] != ""]
+            for mo in mapped_outputs:
+                src_col = mo["col"]
+                map_name = mo["value_map"]
+                if src_col in df.columns:
+                    df[f"{src_col}_数值"] = df[src_col].apply(
+                        lambda v, mn=map_name: apply_value_map(v, mn)
+                    )
+            all_data.append(df)
+        except Exception as e:
+            logging.warning("跳过 %s: %s", f.name, e)
+
+    if not all_data:
+        logging.warning("未读取到有效数据")
+        return
+    merged = pd.concat(all_data, ignore_index=True)
+
+    for mo in mapped_outputs:
+        val_col = f"{mo['col']}_数值"
+        if val_col not in merged.columns:
+            continue
+        wide = merged.pivot_table(
+            index="timestamp", columns=name_col, values=val_col, aggfunc="first"
+        )
+        wide.reset_index(inplace=True)
+        wide = wide.sort_values("timestamp").reset_index(drop=True)
+        save_csv_with_split(wide, out_dir / mo["output_file"])
+        if mo.get("mapping_file"):
+            write_mapping_csv(out_dir, mo["mapping_file"], mo["value_map"], mo["col"])
+    logging.info("已输出: %s", out_dir)
+
+
+def process_timeseries_multicol(input_dir: Path, task: dict) -> None:
+    """多列时间序列 Excel：timestamp + 多个数值列直出（不做 pivot）"""
+    out_dir = ensure_output_dir(task["output_dir"])
+    cols = task["columns"]
+    skip = task.get("skip_rows", 2)
+    date_col = task.get("date_col", "日期")
+    time_col = task.get("time_col", "时点")
+    value_col_names = task.get("value_col_names", [])
+    all_data = []
+
+    for f in sorted(input_dir.glob("*.xlsx")):
+        try:
+            df = pd.read_excel(f, header=None)
+            if df.shape[0] <= skip:
+                continue
+            df = df.iloc[skip:].copy()
+            df.columns = cols[: df.shape[1]]
+            df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+            for vc in value_col_names:
+                if vc in df.columns:
+                    df[vc] = pd.to_numeric(df[vc], errors="coerce")
+            df = df.dropna(subset=[date_col])
+            df["timestamp"] = df.apply(
+                lambda r: merge_datetime(r[date_col], r[time_col]), axis=1
+            )
+            keep = ["timestamp"] + [vc for vc in value_col_names if vc in df.columns]
+            df = df[df["timestamp"] != ""][keep]
+            all_data.append(df)
+        except Exception as e:
+            logging.warning("跳过 %s: %s", f.name, e)
+
+    if not all_data:
+        logging.warning("未读取到有效数据")
+        return
+    merged = pd.concat(all_data, ignore_index=True)
+    merged = merged.sort_values("timestamp").reset_index(drop=True)
+    save_csv_with_split(merged, out_dir / task["output_file"])
+    logging.info("已输出: %s", out_dir)
+
+
+def process_timeseries_csv(input_dir: Path, task: dict) -> None:
+    """多列时间序列 CSV：timestamp + 多个数值列直出"""
+    out_dir = ensure_output_dir(task["output_dir"])
+    encoding = task.get("file_encoding", "utf-8")
+    header_row = task.get("header_row", 0)
+    date_col = task.get("date_col", "日期")
+    time_col = task.get("time_col", "时点")
+    value_col_names = task.get("value_col_names", [])
+    all_data = []
+
+    for f in sorted(input_dir.glob("*.csv")):
+        try:
+            df = pd.read_csv(f, encoding=encoding, header=header_row)
+            if df.shape[0] < 1:
+                continue
+            df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+            for vc in value_col_names:
+                if vc in df.columns:
+                    df[vc] = pd.to_numeric(df[vc], errors="coerce")
+            df = df.dropna(subset=[date_col])
+            df["timestamp"] = df.apply(
+                lambda r: merge_datetime(r[date_col], r[time_col]), axis=1
+            )
+            keep = ["timestamp"] + [vc for vc in value_col_names if vc in df.columns]
+            df = df[df["timestamp"] != ""][keep]
+            all_data.append(df)
+        except Exception as e:
+            logging.warning("跳过 %s: %s", f.name, e)
+
+    if not all_data:
+        logging.warning("未读取到有效数据")
+        return
+    merged = pd.concat(all_data, ignore_index=True)
+    merged = merged.drop_duplicates(subset=["timestamp"], keep="last")
+    merged = merged.sort_values("timestamp").reset_index(drop=True)
+    save_csv_with_split(merged, out_dir / task["output_file"])
+    logging.info("已输出: %s", out_dir)
+
+
+def process_tabular_date(input_dir: Path, task: dict) -> None:
+    """简单日期表格：添加 timestamp 后按原始行结构直出（无时点列）"""
+    out_dir = ensure_output_dir(task["output_dir"])
+    cols = task["columns"]
+    skip = task.get("skip_rows", 2)
+    date_col = task.get("date_col", "日期")
+    output_col_names = task.get("output_col_names", [])
+    all_data = []
+
+    for f in sorted(input_dir.glob("*.xlsx")):
+        try:
+            df = pd.read_excel(f, header=None)
+            if df.shape[0] <= skip:
+                continue
+            df = df.iloc[skip:].copy()
+            df.columns = cols[: df.shape[1]]
+            df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+            df = df.dropna(subset=[date_col])
+            df["timestamp"] = df[date_col].apply(extract_date_000)
+            df = df[df["timestamp"] != ""]
+            keep = ["timestamp"] + [
+                c for c in output_col_names if c in df.columns
+            ]
+            all_data.append(df[keep])
+        except Exception as e:
+            logging.warning("跳过 %s: %s", f.name, e)
+
+    if not all_data:
+        logging.warning("未读取到有效数据")
+        return
+    merged = pd.concat(all_data, ignore_index=True)
+    merged = merged.sort_values("timestamp").reset_index(drop=True)
+    save_csv_with_split(merged, out_dir / task["output_file"])
+    logging.info("已输出: %s", out_dir)
+
+
 # ── 处理器注册表 ────────────────────────────────────────────────
 PROCESSOR_REGISTRY: dict[str, Any] = {
     "section_constraints":      process_section_constraints,
@@ -826,6 +993,10 @@ PROCESSOR_REGISTRY: dict[str, Any] = {
     "secondary_freq_clearing":  process_secondary_freq_clearing,
     "coal_unit_capacity":       process_coal_unit_capacity,
     "unit_generation_curve":    process_unit_generation_curve,
+    "timeseries_multicol":     process_timeseries_multicol,
+    "timeseries_csv":          process_timeseries_csv,
+    "tabular_date":            process_tabular_date,
+    "unit_date_mapped":        process_unit_date_mapped,
 }
 
 
@@ -896,11 +1067,11 @@ def main() -> int:
             logging.warning("[跳过] %s (未知处理类型: %s)", name, task_type)
             continue
 
-        # 节点边际电价支持目录前缀匹配，目录可能不存在
-        input_dir = _DATA_ROOT / name
+        data_dir_name = task.get("data_dir", name)
+        input_dir = _DATA_ROOT / data_dir_name
         if task.get("dir_prefix_match"):
             has_data = input_dir.exists() or any(
-                d.is_dir() and d.name.startswith(name) for d in _DATA_ROOT.iterdir()
+                d.is_dir() and d.name.startswith(data_dir_name) for d in _DATA_ROOT.iterdir()
             )
             if not has_data:
                 logging.warning("[跳过] %s (目录不存在)", name)
