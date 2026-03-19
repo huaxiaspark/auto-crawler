@@ -33,8 +33,8 @@ request:
   page_interval: 2          # 每次翻页间隔（秒）
   query_interval: 3         # 每次查询间隔（秒）
   date_interval: 0.2        # 日期迭代间隔（秒）
-  retry_times: 3            # 失败重试次数
-  retry_interval: 10         # 重试间隔（秒）
+  retry_times: 5            # 失败重试次数
+  retry_interval: 5         # 重试间隔（秒）
   export_timeout: 60        # 导出下载超时（秒）
 
 # 调度频率（通过命令行 --schedule 参数启用定时模式）

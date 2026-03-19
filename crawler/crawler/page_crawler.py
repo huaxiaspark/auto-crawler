@@ -273,6 +273,10 @@ class PageCrawler:
         该平台的 Vue.js 应用在页面切换或异步加载时，可能会替换 iframe 元素，
         导致之前获取的 Frame 引用失效。此方法在关键操作前调用，
         确保操作上下文始终指向有效的 iframe。
+
+        重新检测到 iframe 后，会校验其 ID 是否与任务 iframe 一致。
+        若不一致（如检测到首页的 pxf-common-portal 而非任务的 iframe），
+        说明页面已被刷新回首页，抛出异常让上层触发恢复导航。
         """
         if self._is_frame_valid():
             return
@@ -286,6 +290,20 @@ class PageCrawler:
         for attempt in range(5):
             frame = self._get_content_frame()
             if frame:
+                # ★ 校验：重新检测到的 iframe 是否与任务 iframe 一致
+                # 若不一致，说明页面已被刷新回首页（如检测到 pxf-common-portal）
+                if (self._task_iframe_id
+                        and self._current_iframe_id != self._task_iframe_id):
+                    logger.warning(
+                        "重新检测到的 iframe '%s' 与任务 iframe '%s' 不一致，"
+                        "页面可能已被刷新回首页",
+                        self._current_iframe_id, self._task_iframe_id,
+                    )
+                    raise RuntimeError(
+                        f"iframe 已变更（期望 '{self._task_iframe_id}'，"
+                        f"实际 '{self._current_iframe_id}'），页面可能已被刷新回首页"
+                    )
+
                 self.filter_handler.ctx = frame
                 self.export_handler.ctx = frame
                 self.extractor.ctx = frame
@@ -311,7 +329,8 @@ class PageCrawler:
         检测逻辑（按优先级）：
         1. 如果记录了任务 iframe ID，检查该 iframe 是否仍存在且可见且 Frame 有效；
            若 _task_iframe_id 存在但 iframe 不可用，直接返回 False。
-        2. 若未记录 iframe ID，检查当前 ctx 是否仍有表单控件（说明还在内容页面）。
+        2. 若未记录 iframe ID，检查当前 ctx 是否有任务页面特有的控件
+           （日期选择器、下拉框等，排除通用 input/button 以避免首页误匹配）。
         3. 检测侧边栏「信息披露」节点是否仍处于展开状态；
            若已收起，说明页面可能已被刷新回首页。
 
@@ -333,12 +352,13 @@ class PageCrawler:
             logger.debug("任务 iframe '%s' 已不可用", self._task_iframe_id)
             return False
 
-        # 检测2：当前 ctx 是否有表单控件（说明还在内容页面）
+        # 检测2：当前 ctx 是否有任务页面特有的控件
+        # 使用日期选择器等高区分度选择器，避免首页 iframe 中的通用 input/button 误匹配
         try:
             ctx = self.filter_handler.ctx
             if ctx != self.page:
                 count = ctx.locator(
-                    "input, button, .el-date-editor, .el-select, "
+                    ".el-date-editor, .el-select, "
                     ".fr-trigger-editor, .fr-form-imgboard"
                 ).count()
                 if count > 0:
@@ -369,14 +389,7 @@ class PageCrawler:
         与目标页面的 iframe（如 pxf-phbsx-other-outer）不同，
         所有后续操作（查找按钮、设置日期等）都会失败。
 
-        检测策略（按优先级）：
-        1. 主动检测：调用 _is_on_task_page() 判断是否仍在任务页面；
-           若 _task_iframe_id 已记录，该方法内部已包含 iframe 可用性检测，
-           结果为 False 时直接触发恢复。
-        2. 兼容检测：若主动检测未触发恢复，再比较 _current_iframe_id 与
-           _task_iframe_id 是否一致（适用于 iframe ID 发生变化但主动检测未捕获的情况）。
-        注意：当 _task_iframe_id 存在时，步骤2之后的 iframe 可见性检测实际上
-        不会被执行（_is_on_task_page 已覆盖该场景），保留仅作为防御性代码。
+        检测由 _is_on_task_page() 统一完成（iframe 可用性 → 表单控件 → 侧边栏状态）。
 
         Args:
             category: 分类目录（如 "现货实时数据"）
@@ -386,45 +399,8 @@ class PageCrawler:
         Returns:
             True 如果执行了恢复导航，False 如果页面正常无需恢复
         """
-        need_recover = False
-
-        # ── 主动检测：判断是否仍在任务页面 ──
-        if not self._is_on_task_page():
-            logger.warning(
-                "主动检测：当前不在任务页面，疑似被刷新回首页，"
-                "正在重新导航到「%s」...", task_name
-            )
-            need_recover = True
-
-        # ── 兼容检测：iframe ID 发生变化 ──
-        # 适用于 _task_iframe_id 未记录（首次导航前）但 iframe 已切换的情况
-        if not need_recover and self._task_iframe_id:
-            if self._current_iframe_id != self._task_iframe_id:
-                logger.warning(
-                    "检测到 iframe ID 变化: 期望 '%s', 当前 '%s'，"
-                    "页面可能已被刷新回首页",
-                    self._task_iframe_id, self._current_iframe_id,
-                )
-                need_recover = True
-
-        # ── 防御性检测：任务 iframe 不可见/不可用 ──
-        # 注意：当 _task_iframe_id 存在时，_is_on_task_page() 已覆盖此场景，
-        # 此处实际上不会被执行，保留作为防御性代码。
-        if not need_recover and self._task_iframe_id:
-            try:
-                target = self.page.query_selector(
-                    f'iframe#{self._task_iframe_id}'
-                )
-                if target and target.is_visible():
-                    frame = target.content_frame()
-                    if frame:
-                        frame.evaluate("() => document.readyState")
-                        return False  # 页面正常，无需恢复
-                need_recover = True
-            except Exception:
-                need_recover = True
-
-        if not need_recover:
+        # _is_on_task_page() 内部已覆盖 iframe 可用性、表单控件、侧边栏状态三级检测
+        if self._is_on_task_page():
             return False
 
         # ★ 确认需要恢复：重新导航到目标页面
@@ -675,6 +651,20 @@ class PageCrawler:
             self._ensure_content_frame()
             dropdown_options = self.filter_handler.get_dropdown_options(dropdown_label)
             if not dropdown_options:
+                # 获取下拉选项失败，可能页面已被刷新，尝试恢复导航后重新获取
+                logger.warning("未获取到「%s」的下拉选项，尝试恢复导航后重新获取",
+                               dropdown_label)
+                try:
+                    recovered = self._recover_navigation(
+                        category, task_name, subcategory)
+                    if recovered:
+                        self._ensure_content_frame()
+                        dropdown_options = self.filter_handler.get_dropdown_options(
+                            dropdown_label)
+                except Exception as e:
+                    logger.error("恢复导航后重新获取下拉选项失败: %s", e)
+
+            if not dropdown_options:
                 logger.warning("未获取到「%s」的下拉选项，尝试不选择直接查询",
                                dropdown_label)
                 dropdown_options = [""]  # 空字符串表示不选择
@@ -789,6 +779,23 @@ class PageCrawler:
                 self._ensure_content_frame()
                 self._wait_for_dropdown_refresh(dropdown_label)
                 dropdown_options = self.filter_handler.get_dropdown_options(dropdown_label)
+                if not dropdown_options:
+                    # 获取下拉选项失败，可能页面已被刷新，尝试恢复导航后重新获取
+                    logger.warning("[%d/%d] 日期 %s 未获取到「%s」的下拉选项，尝试恢复导航",
+                                   date_idx + 1, total_dates, date_str, dropdown_label)
+                    try:
+                        recovered = self._recover_navigation(
+                            category, task_name, subcategory)
+                        if recovered:
+                            self._ensure_content_frame()
+                            self.filter_handler.set_date(date_str, quick_mode=False)
+                            time.sleep(0.5)
+                            self._wait_for_dropdown_refresh(dropdown_label)
+                            dropdown_options = self.filter_handler.get_dropdown_options(
+                                dropdown_label)
+                    except Exception as e:
+                        logger.error("恢复导航后重新获取下拉选项失败: %s", e)
+
                 if not dropdown_options:
                     logger.warning("[%d/%d] 日期 %s 未获取到「%s」的下拉选项，跳过",
                                    date_idx + 1, total_dates, date_str, dropdown_label)
@@ -1009,6 +1016,13 @@ class PageCrawler:
                         self._recover_navigation(category, task_name, subcategory)
                     except Exception as nav_err:
                         logger.error("恢复导航失败: %s", nav_err)
+                        # 恢复导航失败，页面状态不确定，跳过本次尝试
+                        if attempt < self.retry_times:
+                            time.sleep(self.retry_interval)
+                            continue
+                        else:
+                            logger.error("已达最大重试次数，跳过此记录")
+                            return False
 
                 # 确保 iframe 上下文有效
                 self._ensure_content_frame()
@@ -1067,6 +1081,14 @@ class PageCrawler:
                         self._recover_navigation(category, task_name, subcategory)
                     except Exception as nav_err:
                         logger.error("恢复导航失败: %s", nav_err)
+                        # 恢复导航失败，页面状态不确定，跳过本次尝试
+                        if attempt < self.retry_times:
+                            time.sleep(self.retry_interval)
+                            continue
+                        else:
+                            logger.error("已达最大重试次数，跳过 [%s][%s]",
+                                         task_name, date_str)
+                            return
 
                 self._ensure_content_frame()
                 # 重试时需要重新设置日期（页面刷新后日期会丢失）
@@ -1092,13 +1114,14 @@ class PageCrawler:
         实际执行全部数据导出的核心逻辑。
 
         日期已在主流程中设置完毕，本方法直接执行导出操作。
+        恢复导航统一由外层 _crawl_export_all 的重试循环负责，
+        本方法仅在当前页面上尝试导出，失败则抛异常交给外层重试。
+
         流程：
         1. 直接点击导出按钮
-        2. 若未找到导出按钮（可能页面已自动刷新回首页），则通过路径恢复导航、重设日期后重试导出
-        3. 若仍失败，尝试先点击查询再导出
-        4. 若未找到查询按钮，再次恢复导航并重设日期、点击查询、导出后仍失败则报错
+        2. 若未成功，尝试先点击查询再导出
+        3. 仍失败则抛异常，由外层重试（含恢复导航）
         """
-        subcategory = task_config.get("subcategory", None)
 
         def do_export():
             return self.export_handler.try_export(
@@ -1114,23 +1137,9 @@ class PageCrawler:
             logger.info("导出全部数据成功: %s", filepath)
             return
 
-        # 2. 未找到导出按钮时，可能系统自动刷新已回到首页，通过路径重新进入页面后重试
-        logger.info("未找到导出按钮，可能页面已刷新回首页，尝试恢复导航并重试...")
-        try:
-            recovered = self._recover_navigation(category, task_name, subcategory)
-            if recovered:
-                self._ensure_content_frame()
-                self.filter_handler.set_date(date_str, quick_mode=True)
-                time.sleep(0.5)
-                filepath = do_export()
-                if filepath:
-                    logger.info("恢复导航后导出全部数据成功: %s", filepath)
-                    return
-        except Exception as e:
-            logger.warning("恢复导航后重试导出失败: %s", e)
-
-        # 3. 直接导出未成功，尝试先点击查询再导出
+        # 2. 直接导出未成功，尝试先点击查询再导出
         logger.info("直接导出未成功，尝试先点击查询再导出...")
+        self._ensure_content_frame()
         self.filter_handler.click_query_button()
         time.sleep(1)
 
@@ -1139,23 +1148,7 @@ class PageCrawler:
             logger.info("查询后导出全部数据成功: %s", filepath)
             return
 
-        # 4. 查询按钮也未找到时，再次通过路径恢复导航，重设日期、查询、导出后仍失败则报错
-        logger.info("未找到查询按钮，可能仍在首页，再次尝试恢复导航并重试...")
-        try:
-            recovered = self._recover_navigation(category, task_name, subcategory)
-            if recovered:
-                self._ensure_content_frame()
-                self.filter_handler.set_date(date_str, quick_mode=True)
-                time.sleep(0.5)
-                self.filter_handler.click_query_button()
-                time.sleep(1)
-                filepath = do_export()
-                if filepath:
-                    logger.info("恢复导航后查询再导出成功: %s", filepath)
-                    return
-        except Exception as e:
-            logger.warning("再次恢复导航后重试失败: %s", e)
-
+        # 3. 仍失败，抛异常交给外层重试（外层会负责恢复导航）
         raise RuntimeError(f"导出全部数据失败: {task_name} {date_str}")
 
     # ── 单次爬取（日期+下拉组合） ────────────────────────────────

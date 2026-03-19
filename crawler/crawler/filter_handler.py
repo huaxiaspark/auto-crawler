@@ -955,6 +955,7 @@ class FilterHandler:
                 self._el_clear_dropdown_input(dropdown_label)
         except Exception as e:
             logger.warning("清空下拉框输入值失败 [%s]: %s", dropdown_label, e)
+            raise
 
     def quick_clear_fr_dropdown(self, dropdown_label: str):
         """
@@ -1061,8 +1062,7 @@ class FilterHandler:
         """
         dropdown = self._find_dropdown(dropdown_label)
         if dropdown is None:
-            logger.warning("未找到下拉框，无法清空: %s", dropdown_label)
-            return
+            raise RuntimeError(f"未找到下拉框，无法清空: {dropdown_label}")
 
         # 策略1：通过 JS 清空 input 值并触发事件
         try:
@@ -1203,6 +1203,7 @@ class FilterHandler:
                     continue
 
             logger.warning("未找到查询按钮")
+            raise RuntimeError("未找到查询按钮，页面可能已被刷新")
 
         except Exception as e:
             logger.error("点击查询按钮失败: %s", e)
