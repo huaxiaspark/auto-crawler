@@ -646,6 +646,10 @@ def process_maintenance_plan(input_dir: Path, task: dict) -> None:
         return
     merged = pd.concat(all_data, ignore_index=True)
     merged = merged.sort_values(["timestamp", cols[2]]).reset_index(drop=True)
+    drop_cols = [c for c in ["序号", "日期"] if c in merged.columns]
+    merged = merged.drop(columns=drop_cols)
+    other_cols = [c for c in merged.columns if c != "timestamp"]
+    merged = merged[["timestamp"] + other_cols]
     save_csv_with_split(merged, out_dir / task["output_file"])
     logging.info("已输出: %s", out_dir)
 
