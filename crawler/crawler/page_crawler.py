@@ -345,7 +345,34 @@ class PageCrawler:
                     frame = target.content_frame()
                     if frame:
                         frame.evaluate("() => document.readyState")
-                        return True
+                        # ★ 进一步校验：iframe 内部是否仍有任务页面特有的控件
+                        # iframe 元素可能仍存在，但内容已被刷新回首页/空白状态
+                        control_count = frame.locator(
+                            ".el-date-editor, .el-select, "
+                            ".fr-trigger-editor, .fr-form-imgboard"
+                        ).count()
+                        if control_count > 0:
+                            return True
+                        # iframe 内部也可能有嵌套 iframe（FineReport 三层结构）
+                        inner_frames = frame.query_selector_all("iframe")
+                        for inner_el in inner_frames:
+                            try:
+                                inner_frame = inner_el.content_frame()
+                                if inner_frame:
+                                    inner_count = inner_frame.locator(
+                                        ".el-date-editor, .el-select, "
+                                        ".fr-trigger-editor, .fr-form-imgboard"
+                                    ).count()
+                                    if inner_count > 0:
+                                        return True
+                            except Exception:
+                                continue
+                        # iframe 存在但内部无任务控件，内容可能已被刷新
+                        logger.debug(
+                            "任务 iframe '%s' 存在但内部无任务控件，疑似内容已被刷新",
+                            self._task_iframe_id,
+                        )
+                        return False
             except Exception:
                 pass
             # 任务 iframe 不再可用
