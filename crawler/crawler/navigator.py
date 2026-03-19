@@ -289,6 +289,8 @@ class Navigator:
         点击三级叶子菜单（如：实时节点边际电价、日前备用总量等）
 
         叶子节点点击后触发页面导航，需等待页面加载完成。
+        若找不到子菜单，大概率是页面被自动刷新回首页，
+        此时重置导航状态并重新从「信息披露」展开后重试一次。
 
         Args:
             subcategory: 子分类名称
@@ -298,6 +300,17 @@ class Navigator:
         except PlaywrightTimeout:
             logger.error("未找到子菜单「%s」或页面加载超时", subcategory)
             self._save_debug_screenshot(f"subcategory_{subcategory}_failed")
+
+            # 页面极大可能已被自动刷新回首页，重置状态后重试
+            logger.warning("疑似页面已刷新回首页，重置导航状态后重试「%s」...", subcategory)
+            self._info_disclosure_expanded = False
+            self._current_category = None
+            try:
+                self.wait_for_sidebar_ready()
+                self.navigate_to_info_disclosure()
+            except Exception as e:
+                logger.error("重置导航状态失败: %s", e)
+                raise PlaywrightTimeout(f"未找到子菜单「{subcategory}」且重置导航失败")
             raise
         time.sleep(2)
         try:
