@@ -620,11 +620,26 @@ class PageCrawler:
         else:
             logger.info("任务含下拉选项，启用「日期+下拉」粒度断点续跑")
 
-        # 导航到目标页面
-        try:
-            self.navigator.navigate_to_page(category, task_name, subcategory)
-        except Exception as e:
-            logger.error("导航到「%s」失败: %s", task_name, e)
+        # 导航到目标页面（含重试：页面可能在上一个任务执行期间被刷新回首页）
+        nav_success = False
+        for nav_attempt in range(1, 4):  # 最多重试 3 次
+            try:
+                if nav_attempt > 1:
+                    # 重试前重置导航状态，确保侧边栏重新展开
+                    logger.info("重试导航到「%s」（第%d次）...", task_name, nav_attempt)
+                    self.navigator._info_disclosure_expanded = False
+                    self.navigator._current_category = None
+                    self.navigator.wait_for_sidebar_ready()
+                self.navigator.navigate_to_page(category, task_name, subcategory)
+                nav_success = True
+                break
+            except Exception as e:
+                logger.error("导航到「%s」失败（第%d次）: %s", task_name, nav_attempt, e)
+                if nav_attempt < 3:
+                    time.sleep(3)
+
+        if not nav_success:
+            logger.error("导航到「%s」多次失败，跳过此任务", task_name)
             return
 
         # ★ 重置 iframe ID 记录（新任务可能使用不同的 iframe）
