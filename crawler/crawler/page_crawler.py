@@ -326,18 +326,30 @@ class PageCrawler:
         """
         主动检测当前页面是否仍在任务页面（而非被刷新回首页）。
 
-        检测逻辑（按优先级）：
-        1. 如果记录了任务 iframe ID，检查该 iframe 是否仍存在且可见且 Frame 有效；
-           若 _task_iframe_id 存在但 iframe 不可用，直接返回 False。
-        2. 若未记录 iframe ID，检查当前 ctx 是否有任务页面特有的控件
-           （日期选择器、下拉框等，排除通用 input/button 以避免首页误匹配）。
-        3. 检测侧边栏「信息披露」节点是否仍处于展开状态；
-           若已收起，说明页面可能已被刷新回首页。
+        检测逻辑：
+        0. 前置检测：侧边栏「信息披露」节点是否仍处于展开状态。
+           页面被刷新回首页时，侧边栏一定会重新加载，「信息披露」一定是收起状态。
+           这是最可靠的判据，优先于 iframe 检测。
+        1. 如果记录了任务 iframe ID，检查该 iframe 是否仍存在且可见且 Frame 有效，
+           并校验 iframe 内部是否仍有任务页面特有的控件。
+        2. 若未记录 iframe ID，检查当前 ctx 是否有任务页面特有的控件。
 
         Returns:
             True 表示仍在任务页面，False 表示已被跳转（需要恢复导航）
         """
-        # 检测1：任务 iframe 是否仍存在且可见
+        # ── 前置检测：侧边栏「信息披露」是否仍展开 ──
+        # 页面被刷新回首页时，侧边栏一定重新加载，「信息披露」一定是收起状态。
+        # 这是最可靠、最快速的判据，优先执行。
+        try:
+            if not self.navigator._is_tree_node_expanded("信息披露"):
+                logger.debug("侧边栏「信息披露」节点未展开，页面已被刷新回首页")
+                return False
+        except Exception:
+            # 侧边栏本身不可用（如页面完全崩溃），也视为已离开任务页面
+            logger.debug("检测侧边栏状态失败，视为已离开任务页面")
+            return False
+
+        # ── 检测1：任务 iframe 是否仍存在且内容有效 ──
         if self._task_iframe_id:
             try:
                 target = self.page.query_selector(f'iframe#{self._task_iframe_id}')
@@ -345,42 +357,13 @@ class PageCrawler:
                     frame = target.content_frame()
                     if frame:
                         frame.evaluate("() => document.readyState")
-                        # ★ 进一步校验：iframe 内部是否仍有任务页面特有的控件
-                        # iframe 元素可能仍存在，但内容已被刷新回首页/空白状态
-                        control_count = frame.locator(
-                            ".el-date-editor, .el-select, "
-                            ".fr-trigger-editor, .fr-form-imgboard"
-                        ).count()
-                        if control_count > 0:
-                            return True
-                        # iframe 内部也可能有嵌套 iframe（FineReport 三层结构）
-                        inner_frames = frame.query_selector_all("iframe")
-                        for inner_el in inner_frames:
-                            try:
-                                inner_frame = inner_el.content_frame()
-                                if inner_frame:
-                                    inner_count = inner_frame.locator(
-                                        ".el-date-editor, .el-select, "
-                                        ".fr-trigger-editor, .fr-form-imgboard"
-                                    ).count()
-                                    if inner_count > 0:
-                                        return True
-                            except Exception:
-                                continue
-                        # iframe 存在但内部无任务控件，内容可能已被刷新
-                        logger.debug(
-                            "任务 iframe '%s' 存在但内部无任务控件，疑似内容已被刷新",
-                            self._task_iframe_id,
-                        )
-                        return False
+                        return True
             except Exception:
                 pass
-            # 任务 iframe 不再可用
             logger.debug("任务 iframe '%s' 已不可用", self._task_iframe_id)
             return False
 
-        # 检测2：当前 ctx 是否有任务页面特有的控件
-        # 使用日期选择器等高区分度选择器，避免首页 iframe 中的通用 input/button 误匹配
+        # ── 检测2：当前 ctx 是否有任务页面特有的控件 ──
         try:
             ctx = self.filter_handler.ctx
             if ctx != self.page:
@@ -390,17 +373,6 @@ class PageCrawler:
                 ).count()
                 if count > 0:
                     return True
-        except Exception:
-            pass
-
-        # 检测3：侧边栏「信息披露」节点是否仍处于展开状态
-        # 如果页面被刷新回首页，侧边栏会重新加载，「信息披露」展开状态会丢失
-        try:
-            sidebar_ready = self.navigator._is_tree_node_expanded("信息披露")
-            if not sidebar_ready:
-                # 侧边栏已收起说明页面可能已刷新
-                logger.debug("侧边栏「信息披露」节点未展开，疑似已回首页")
-                return False
         except Exception:
             pass
 
