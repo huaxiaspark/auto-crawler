@@ -49,6 +49,9 @@ def parse_loss_file(filepath: str) -> Dict[str, List[Tuple[str, Optional[str]]]]
                 except ValueError:
                     logger.warning("第 %d 行：日期格式错误 '%s'，已跳过", line_no, date_str)
                     continue
+                # META_MISSING 标记表示该日期元数据缺失，需全量重爬，通道置为 None
+                if channel == "META_MISSING":
+                    channel = None
                 result.setdefault(task_name, []).append((date_str, channel or None))
             else:
                 logger.warning("第 %d 行：格式应为「名称,日期」或「名称,日期,通道名称」，已跳过", line_no)

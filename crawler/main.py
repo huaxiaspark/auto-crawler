@@ -158,11 +158,42 @@ def run_crawler(config: dict, tasks: dict, start_date: str, end_date: str,
                     # 缺失补充模式：从 loss_queries 中提取该任务的查询参数
                     entries = loss_queries[task_name]
                     if task_config.get("dropdown_skip_none", False):
-                        # 含下拉筛选且跳过「不选」的任务：转为 batch_queries 格式（日期+筛选选项）
+                        # 含下拉筛选且跳过「不选」的任务：
+                        # - 有具体通道名的 → batch_queries（精确补爬）
+                        # - channel=None（META_MISSING）→ date_list（全量重爬该日期）
                         batch_queries = [(d, d, ch) for d, ch in entries if ch]
-                        if not batch_queries:
+                        meta_missing_dates = sorted(set(
+                            d for d, ch in entries if not ch
+                        ))
+                        if meta_missing_dates:
+                            logger.info(
+                                "任务「%s」有 %d 个日期需全量重爬（元数据缺失）: %s",
+                                task_name, len(meta_missing_dates),
+                                ", ".join(meta_missing_dates[:5])
+                                + ("..." if len(meta_missing_dates) > 5 else ""),
+                            )
+                        if not batch_queries and not meta_missing_dates:
                             logger.warning("任务「%s」在 loss 文件中无有效筛选选项记录，跳过", task_name)
                             continue
+                        # 先执行精确补爬
+                        if batch_queries:
+                            page_crawler.crawl_task(
+                                task_name=task_name,
+                                task_config=task_config,
+                                start_date=start_date,
+                                end_date=end_date,
+                                batch_queries=batch_queries,
+                            )
+                        # 再执行元数据缺失日期的全量重爬
+                        if meta_missing_dates:
+                            page_crawler.crawl_task(
+                                task_name=task_name,
+                                task_config=task_config,
+                                start_date=start_date,
+                                end_date=end_date,
+                                date_list=meta_missing_dates,
+                            )
+                        continue
                     else:
                         # 无通道名称：仅按日期列表爬取
                         task_date_list = sorted(set(d for d, _ in entries))

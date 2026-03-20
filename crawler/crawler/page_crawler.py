@@ -862,19 +862,27 @@ class PageCrawler:
 
                     logger.info("  下拉选项 [%d/%d]: %s",
                                 opt_idx + 1, len(effective_options), option or "(默认)")
-                    success = self._crawl_single(
-                        task_name=task_name,
-                        task_config=task_config,
-                        date_str=date_str,
-                        category=category,
-                        dropdown_label=dropdown_label,
-                        dropdown_value=option,
-                        has_export=has_export,
-                        export_type=export_type,
-                        has_pagination=has_pagination,
-                        is_clearing_summary=is_clearing_summary,
-                        date_already_set=True,
-                    )
+                    try:
+                        success = self._crawl_single(
+                            task_name=task_name,
+                            task_config=task_config,
+                            date_str=date_str,
+                            category=category,
+                            dropdown_label=dropdown_label,
+                            dropdown_value=option,
+                            has_export=has_export,
+                            export_type=export_type,
+                            has_pagination=has_pagination,
+                            is_clearing_summary=is_clearing_summary,
+                            date_already_set=True,
+                        )
+                    except Exception as e:
+                        logger.error(
+                            "[%d/%d] 日期 %s 选项「%s」爬取异常: %s",
+                            date_idx + 1, total_dates, date_str,
+                            option or "(默认)", e, exc_info=True,
+                        )
+                        success = False
                     if success:
                         completed_option_keys.add(option_key)
             elif has_dropdown and dropdown_options:
@@ -903,19 +911,27 @@ class PageCrawler:
 
                     logger.info("  下拉选项 [%d/%d]: %s",
                                 opt_idx + 1, len(dropdown_options), option or "(默认)")
-                    success = self._crawl_single(
-                        task_name=task_name,
-                        task_config=task_config,
-                        date_str=date_str,
-                        category=category,
-                        dropdown_label=dropdown_label,
-                        dropdown_value=option,
-                        has_export=has_export,
-                        export_type=export_type,
-                        has_pagination=has_pagination,
-                        is_clearing_summary=is_clearing_summary,
-                        date_already_set=True,
-                    )
+                    try:
+                        success = self._crawl_single(
+                            task_name=task_name,
+                            task_config=task_config,
+                            date_str=date_str,
+                            category=category,
+                            dropdown_label=dropdown_label,
+                            dropdown_value=option,
+                            has_export=has_export,
+                            export_type=export_type,
+                            has_pagination=has_pagination,
+                            is_clearing_summary=is_clearing_summary,
+                            date_already_set=True,
+                        )
+                    except Exception as e:
+                        logger.error(
+                            "[%d/%d] 日期 %s 选项「%s」爬取异常: %s",
+                            date_idx + 1, total_dates, date_str,
+                            option or "(默认)", e, exc_info=True,
+                        )
+                        success = False
                     if success:
                         completed_option_keys.add(option_key)
             else:

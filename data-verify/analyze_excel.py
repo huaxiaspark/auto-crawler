@@ -483,14 +483,17 @@ def check_completeness(files: list, target_date: str, validator_cfg: dict) -> tu
         task_name = validator_cfg['name']
         dynamic = _load_dynamic_channels(meta_path, task_name, target_date)
         if dynamic is None:
-            # 元数据中无此日期记录，跳过完整性校验
+            # 元数据中无此日期记录，标记为校验失败（而非静默通过）
+            logging.warning("通道元数据缺失: 任务=%s, 日期=%s，无法校验完整性",
+                            task_name, target_date)
             date_files = [f for f in files if f['date'] == target_date]
-            return True, {
+            return False, {
                 'date': target_date,
                 'total_files': len(date_files),
-                'expected_count': 0,
+                'expected_count': -1,
                 'missing_channels': [],
                 'duplicate_channels': [],
+                'meta_missing': True,
             }
         standard_channels = dynamic
 
@@ -812,9 +815,16 @@ def run_validator(validator_cfg: dict, cfg: dict, target_dates: list):
         for date in target_dates:
             ok, info = check_completeness(remaining_files, date, validator_cfg)
             status = "✅" if ok else "❌"
-            print(f"{status} {date}: {info['total_files']}/{info['expected_count']}")
+            if info.get('meta_missing'):
+                print(f"{status} {date}: 元数据缺失，无法校验")
+            else:
+                print(f"{status} {date}: {info['total_files']}/{info['expected_count']}")
             if not ok:
-                if info['missing_channels']:
+                if info.get('meta_missing'):
+                    # 元数据缺失：该日期无法校验，标记为 META_MISSING
+                    print(f"   元数据缺失，无法校验该日期")
+                    all_missing.append({'name': name, 'date': date, 'channel': 'META_MISSING'})
+                elif info['missing_channels']:
                     # prefix_date_channel：按通道名记录缺失
                     sample = info['missing_channels'][:3]
                     more = f"... 共{len(info['missing_channels'])}个" if len(info['missing_channels']) > 3 else ""
