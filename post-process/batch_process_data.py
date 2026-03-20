@@ -136,6 +136,11 @@ def merge_datetime(date_val, time_val) -> str:
         time_str = str(time_val).strip().zfill(5)
         if len(time_str) == 4:
             time_str = "0" + time_str
+        # 24:00 表示当日结束/次日零点，标准 datetime 不支持，需特殊处理
+        if time_str == "24:00":
+            dt = datetime.strptime(f"{date_str} 00:00:00", "%Y-%m-%d %H:%M:%S")
+            dt += pd.Timedelta(days=1)
+            return dt.strftime(_TIME_FMT)
         dt = datetime.strptime(f"{date_str} {time_str}:00", "%Y-%m-%d %H:%M:%S")
         return dt.strftime(_TIME_FMT)
     except Exception:
