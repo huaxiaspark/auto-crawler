@@ -119,6 +119,68 @@ def save_csv_with_split(df: pd.DataFrame, base_path: Path, **to_csv_kwargs) -> N
     logging.info("已拆分为 %d 个文件", n_parts)
 
 
+def _is_zero_only_series(series: pd.Series) -> bool:
+    """判断一列非空数据是否全部为 0。"""
+    numeric = pd.to_numeric(series, errors="coerce").dropna()
+    return not numeric.empty and bool((numeric == 0).all())
+
+
+def _write_cleanup_note(out_dir: Path, note_filename: str, notes: list[str]) -> None:
+    """输出删除说明文档。"""
+    if not notes:
+        return
+    content = ["# 数据删除说明", "", *[f"- {note}" for note in notes], ""]
+    (out_dir / note_filename).write_text("\n".join(content), encoding="utf-8")
+
+
+def finalize_wide_output(
+    wide: pd.DataFrame,
+    out_dir: Path,
+    output_file: str,
+    task: dict,
+    task_name: str,
+) -> None:
+    """针对指定任务执行宽表清洗后再输出。"""
+    cleanup_enabled = task.get("remove_zero_only_output", False)
+    if not cleanup_enabled:
+        save_csv_with_split(wide, out_dir / output_file)
+        return
+
+    note_filename = task.get("cleanup_note_file", "数据删除说明.md")
+    notes: list[str] = []
+    filtered = wide.copy()
+    data_cols = [c for c in filtered.columns if c != "timestamp"]
+    zero_only_cols = [c for c in data_cols if _is_zero_only_series(filtered[c])]
+    if zero_only_cols:
+        filtered = filtered.drop(columns=zero_only_cols)
+        notes.append(
+            f"宽表《{output_file}.csv》删除了 {len(zero_only_cols)} 列全零数据列："
+            f"{'、'.join(map(str, zero_only_cols))}；原因：这些列的非空数据全部为 0。"
+        )
+
+    remaining_data_cols = [c for c in filtered.columns if c != "timestamp"]
+    if not remaining_data_cols:
+        notes.append(
+            f"宽表《{output_file}.csv》已删除；原因：删除全零列后，宽表已不包含有效数据列，"
+            "其业务数据全部为 0。"
+        )
+        _write_cleanup_note(out_dir, note_filename, notes)
+        logging.info("[%s] 宽表 %s 已删除（全零）", task_name, output_file)
+        return
+
+    non_null_values = pd.to_numeric(filtered[remaining_data_cols].stack(), errors="coerce").dropna()
+    if not non_null_values.empty and bool((non_null_values == 0).all()):
+        notes.append(
+            f"宽表《{output_file}.csv》已删除；原因：宽表剩余业务数据全部为 0。"
+        )
+        _write_cleanup_note(out_dir, note_filename, notes)
+        logging.info("[%s] 宽表 %s 已删除（全表为零）", task_name, output_file)
+        return
+
+    save_csv_with_split(filtered, out_dir / output_file)
+    _write_cleanup_note(out_dir, note_filename, notes)
+
+
 def extract_date_000(val) -> str:
     """日期转为当日 00:00:00.000"""
     try:
@@ -324,7 +386,7 @@ def process_channel_numeric(input_dir: Path, task: dict) -> None:
     wide = merged.pivot_table(index="timestamp", columns=name_col, values="数值", aggfunc="first")
     wide.reset_index(inplace=True)
     wide = wide.sort_values("timestamp").reset_index(drop=True)
-    save_csv_with_split(wide, out_dir / task["output_file"])
+    finalize_wide_output(wide, out_dir, task["output_file"], task, task["name"])
     logging.info("已输出: %s", out_dir)
 
 
@@ -361,7 +423,7 @@ def process_channel_text(input_dir: Path, task: dict) -> None:
     wide = merged.pivot_table(index="timestamp", columns=name_col, values="数值", aggfunc="first")
     wide.reset_index(inplace=True)
     wide = wide.sort_values("timestamp").reset_index(drop=True)
-    save_csv_with_split(wide, out_dir / task["output_file"])
+    finalize_wide_output(wide, out_dir, task["output_file"], task, task["name"])
 
     if task.get("mapping_file"):
         write_mapping_csv(out_dir, task["mapping_file"], map_name, value_col)

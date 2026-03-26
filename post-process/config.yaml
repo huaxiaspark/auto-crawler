@@ -132,6 +132,8 @@ tasks:
     value_col: 数值
     output_dir: 断面约束情况及影子价格
     output_file: 断面约束情况及影子价格
+    remove_zero_only_output: true
+    cleanup_note_file: 数据删除说明.md
 
   - name: 实时输电断面约束及阻塞
     type: channel_text
@@ -143,6 +145,8 @@ tasks:
     output_dir: 实时输电断面约束及阻塞
     output_file: 实时输电断面约束及阻塞
     mapping_file: 是否越限映射.csv
+    remove_zero_only_output: true
+    cleanup_note_file: 数据删除说明.md
 
   - name: 实时节点边际电价
     type: node_lmp
