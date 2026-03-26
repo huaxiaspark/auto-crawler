@@ -162,7 +162,7 @@ tasks:
     export_type: "原样导出"
 
   实时市场机组出力及电价:
-    enabled: true
+    enabled: false
     category: "现货实时数据"
     has_export: true
     has_dropdown: true
@@ -345,7 +345,7 @@ tasks:
     dual_date: true  # 该页面有两个日期选择器，爬取时两个均设为同一日期
 
   水电（含抽蓄）总出力:
-    enabled: true
+    enabled: false
     category: "综合查询"
     subcategory: "电网运行"
     has_export: false
