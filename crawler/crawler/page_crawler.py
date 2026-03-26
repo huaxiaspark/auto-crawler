@@ -579,6 +579,7 @@ class PageCrawler:
         export_all = task_config.get("export_all", False)
         dropdown_skip_none = task_config.get("dropdown_skip_none", False)
         dropdown_refresh_on_date = task_config.get("dropdown_refresh_on_date", False)
+        dual_date = task_config.get("dual_date", False)
 
         # 获取已爬取的日期（增量更新）
         # 含下拉且非 export_all 的任务，按“日期+下拉选项”粒度跳过，避免误判。
@@ -750,10 +751,13 @@ class PageCrawler:
             # ★ 先设置日期（export_all 或 无下拉选项但有导出按钮的任务使用 quick_mode）
             # quick_mode 跳过 _wait_for_filters_ready 和日期面板关闭操作（Tab/Escape/点击空白），
             # 因为后续直接点击导出按钮，导出操作会自动关闭任何打开的面板，节省约 3 秒。
-            use_quick_mode = export_all or (has_export and not has_dropdown)
+            use_quick_mode = export_all or (has_export and not has_dropdown and not dual_date)
             try:
                 self._ensure_content_frame()
-                self.filter_handler.set_date(date_str, quick_mode=use_quick_mode)
+                if dual_date:
+                    self.filter_handler.set_dual_date(date_str)
+                else:
+                    self.filter_handler.set_date(date_str, quick_mode=use_quick_mode)
                 if not use_quick_mode:
                     time.sleep(0.5)
             except Exception as e:
@@ -765,8 +769,11 @@ class PageCrawler:
                         category, task_name, subcategory)
                     if recovered:
                         logger.info("页面已恢复，重新设置日期: %s", date_str)
-                        self.filter_handler.set_date(
-                            date_str, quick_mode=use_quick_mode)
+                        if dual_date:
+                            self.filter_handler.set_dual_date(date_str)
+                        else:
+                            self.filter_handler.set_date(
+                                date_str, quick_mode=use_quick_mode)
                         if not use_quick_mode:
                             time.sleep(0.5)
                     else:
@@ -1123,7 +1130,10 @@ class PageCrawler:
                 self._ensure_content_frame()
                 # 重试时需要重新设置日期（页面刷新后日期会丢失）
                 if attempt > 1:
-                    self.filter_handler.set_date(date_str, quick_mode=True)
+                    if task_config.get("dual_date", False):
+                        self.filter_handler.set_dual_date(date_str)
+                    else:
+                        self.filter_handler.set_date(date_str, quick_mode=True)
                     time.sleep(0.5)
                 self._do_crawl_export_all(
                     task_name, task_config, date_str, category, export_type,
@@ -1201,7 +1211,11 @@ class PageCrawler:
 
         # 1. 设置日期（如果主流程已设置过则跳过，节省 ~2-7 秒）
         if not skip_date_set:
-            self.filter_handler.set_date(date_str)
+            dual_date = task_config.get("dual_date", False)
+            if dual_date:
+                self.filter_handler.set_dual_date(date_str)
+            else:
+                self.filter_handler.set_date(date_str)
             time.sleep(0.5)
 
         # 2. 设置下拉选项（先选下拉，再点查询）

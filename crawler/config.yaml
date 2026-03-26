@@ -334,6 +334,16 @@ tasks:
     has_pagination: true
     export_type: "原样导出"
 
+  二次调频出清结果:
+    enabled: true
+    category: "综合查询"
+    subcategory: "市场营运"
+    has_export: true
+    has_dropdown: false
+    has_pagination: false
+    export_type: "原样导出"
+    dual_date: true  # 该页面有两个日期选择器，爬取时两个均设为同一日期
+
   水电（含抽蓄）总出力:
     enabled: true
     category: "综合查询"

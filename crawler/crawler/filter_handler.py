@@ -589,6 +589,162 @@ class FilterHandler:
             logger.error("设置日期失败 [%s]: %s", date_str, e)
             raise
 
+    def set_dual_date(self, date_str: str):
+        """
+        设置双日期选择器（开始日期和结束日期均设为同一值）。
+
+        适用于页面有两个日期输入框的场景（如「二次调频出清结果」）。
+        定位策略：
+        1. 通过 FineReport widgetname 精确定位（开始日期/结束日期）
+        2. 通过 Element UI .el-date-editor 定位前两个日期输入框
+        3. 通过遍历所有 input 找到值为日期格式的输入框
+
+        Args:
+            date_str: 目标日期（YYYY-MM-DD），两个日期选择器均设为此值
+        """
+        import time as time_module
+        start_time = time_module.time()
+        logger.info("设置双日期: %s", date_str)
+
+        try:
+            self._wait_for_filters_ready()
+
+            # ── 定位两个日期输入框 ──
+            date_inputs = []
+
+            # 策略1：FineReport widgetname 精确定位
+            fr_names = [
+                ("开始日期", "结束日期"),
+                ("startDate", "endDate"),
+                ("startdate", "enddate"),
+            ]
+            for start_name, end_name in fr_names:
+                inputs = []
+                for wname in (start_name, end_name):
+                    inp = self._pick_visible_input(self.ctx, [
+                        f'div.fr-trigger-editor[widgetname="{wname}"] input.fr-trigger-texteditor',
+                        f'div[widgetname="{wname}"] input.fr-trigger-texteditor',
+                        f'div[widgetname="{wname}"] input',
+                    ])
+                    if inp is not None:
+                        inputs.append(inp)
+                if len(inputs) == 2:
+                    date_inputs = inputs
+                    logger.debug("通过 FineReport widgetname (%s/%s) 找到双日期输入框",
+                                 start_name, end_name)
+                    break
+
+            # 策略2：Element UI .el-date-editor 定位
+            if len(date_inputs) < 2:
+                try:
+                    editors = self.ctx.locator(".el-date-editor input").all()
+                    visible = [e for e in editors if e.is_visible()]
+                    if len(visible) >= 2:
+                        date_inputs = visible[:2]
+                        logger.debug("通过 Element UI .el-date-editor 找到 %d 个日期输入框",
+                                     len(visible))
+                except Exception:
+                    pass
+
+            # 策略3：FineReport 日期控件（不带特定 widgetname）
+            if len(date_inputs) < 2:
+                try:
+                    fr_inputs = self.ctx.locator(
+                        "div.fr-trigger-editor input.fr-trigger-texteditor"
+                    ).all()
+                    visible = [e for e in fr_inputs if e.is_visible()]
+                    if len(visible) >= 2:
+                        date_inputs = visible[:2]
+                        logger.debug("通过 FineReport 通用选择器找到 %d 个日期输入框",
+                                     len(visible))
+                except Exception:
+                    pass
+
+            # 策略4：遍历所有 input，找值为日期格式或 placeholder 含日期关键词的
+            if len(date_inputs) < 2:
+                try:
+                    all_inputs = self.ctx.locator("input").all()
+                    candidates = []
+                    for inp in all_inputs:
+                        try:
+                            if not inp.is_visible():
+                                continue
+                            val = inp.input_value().strip()
+                            placeholder = (inp.get_attribute("placeholder") or "").strip()
+                            is_date_val = (len(val) == 10 and val[4:5] == "-"
+                                           and val[7:8] == "-")
+                            is_date_ph = any(kw in placeholder
+                                             for kw in ["日期", "date", "Date"])
+                            if is_date_val or is_date_ph:
+                                candidates.append(inp)
+                        except Exception:
+                            continue
+                    if len(candidates) >= 2:
+                        date_inputs = candidates[:2]
+                        logger.debug("通过遍历 input 找到 %d 个日期输入框", len(candidates))
+                except Exception:
+                    pass
+
+            if len(date_inputs) < 2:
+                raise RuntimeError(
+                    f"未找到两个日期输入框（仅找到 {len(date_inputs)} 个）"
+                )
+
+            # ── 依次填写两个日期输入框 ──
+            for idx, date_input in enumerate(date_inputs):
+                label = "开始日期" if idx == 0 else "结束日期"
+                logger.debug("填写%s: %s", label, date_str)
+
+                date_input.click()
+                time.sleep(0.3)
+                date_input.press("Control+a")
+                time.sleep(0.05)
+                date_input.fill(date_str)
+                time.sleep(0.2)
+
+                # 验证输入值，fill 不生效则用 JS 赋值
+                try:
+                    current = date_input.input_value().strip()
+                    if current != date_str:
+                        logger.debug("%s fill 未生效 (%s)，使用 JS 赋值",
+                                     label, current)
+                        self.ctx.evaluate(
+                            """([el, val]) => {
+                                el.value = val;
+                                el.dispatchEvent(new Event('input', {bubbles: true}));
+                                el.dispatchEvent(new Event('change', {bubbles: true}));
+                            }""",
+                            [date_input.element_handle(), date_str],
+                        )
+                except Exception:
+                    pass
+
+                # 按 Tab 确认并切换到下一个输入框
+                try:
+                    date_input.press("Tab")
+                except Exception:
+                    pass
+                time.sleep(0.3)
+
+            # 关闭可能打开的日期面板
+            try:
+                self.page.keyboard.press("Escape")
+            except Exception:
+                pass
+            time.sleep(0.3)
+            try:
+                self.ctx.locator("body").click(position={"x": 0, "y": 0})
+            except Exception:
+                pass
+            time.sleep(0.2)
+
+            total_time = time_module.time() - start_time
+            logger.info("双日期已设置为: %s (总耗时: %.2f秒)", date_str, total_time)
+
+        except Exception as e:
+            logger.error("设置双日期失败 [%s]: %s", date_str, e)
+            raise
+
     def _find_active_dropdown_panel(self):
         """
         找到当前打开的（可见的）el-select 下拉面板。
