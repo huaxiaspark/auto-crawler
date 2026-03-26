@@ -337,7 +337,7 @@ tasks:
   二次调频出清结果:
     enabled: true
     category: "综合查询"
-    subcategory: "市场营运"
+    subcategory: "市场运营"
     has_export: true
     has_dropdown: false
     has_pagination: false
