@@ -41,7 +41,9 @@ request:
 schedule:
   time: "08:30"              # 每天触发时刻（HH:MM），留空则立即执行并每隔 interval_hours 小时重复
   interval_hours: 24         # 当 time 为空时生效：调度间隔（小时）
-  date_mode: "yesterday"     # 每次调度爬取的日期范围：yesterday=仅昨天，today=仅今天，range=使用 date_range 配置
+  date_mode: "today"         # 每次调度的基准日期范围：yesterday=昨天，today=今天，tomorrow=明天，range=使用 date_range.start ~ 当天
+  use_task_date_offsets: true  # 定时模式下是否启用任务级日期偏移
+  default_task_date_offset_days: -1  # 未单独配置任务时，默认抓取基准日偏移量；-1 表示默认抓昨天
 
 # 数据存储
 storage:
@@ -80,6 +82,7 @@ tasks:
   日前备用总量:
     enabled: true
     category: "现货出清结果"
+    schedule_date_offset_days: 0
     has_export: true
     has_dropdown: false
     has_pagination: false
@@ -203,6 +206,7 @@ tasks:
   断面约束:
     enabled: true
     category: "现货日前信息"
+    schedule_date_offset_days: 1
     has_export: true
     has_dropdown: false
     has_pagination: true
@@ -212,6 +216,7 @@ tasks:
   日前联络线计划:
     enabled: true
     category: "现货日前信息"
+    schedule_date_offset_days: 1
     has_export: true
     has_dropdown: true
     dropdown_label: "联络线名称"
@@ -232,6 +237,7 @@ tasks:
   输电通道可用容量:
     enabled: true
     category: "现货日前信息"
+    schedule_date_offset_days: 1
     has_export: true
     has_dropdown: true
     dropdown_label: "通道名称"
@@ -243,6 +249,7 @@ tasks:
   日前机组开机安排:
     enabled: true
     category: "现货日前信息"
+    schedule_date_offset_days: 0
     has_export: true
     has_dropdown: true
     dropdown_label: "机组名称"
@@ -253,6 +260,7 @@ tasks:
   日前节点边际电价:
     enabled: true
     category: "现货日前信息"
+    schedule_date_offset_days: 0
     has_export: true
     has_dropdown: true
     dropdown_label: "节点名称"
@@ -263,6 +271,7 @@ tasks:
   日前正负备用需求:
     enabled: true
     category: "现货日前信息"
+    schedule_date_offset_days: 1
     has_export: true
     has_dropdown: false
     has_pagination: false
@@ -271,6 +280,7 @@ tasks:
   日前必开必停机组:
     enabled: true
     category: "现货日前信息"
+    schedule_date_offset_days: 1
     has_export: true
     has_dropdown: false
     has_pagination: false
@@ -279,6 +289,7 @@ tasks:
   非市场化机组出力:
     enabled: true
     category: "现货日前信息"
+    schedule_date_offset_days: 1
     has_export: true
     has_dropdown: false
     has_pagination: false
@@ -287,6 +298,7 @@ tasks:
   检修总容量:
     enabled: true
     category: "现货日前信息"
+    schedule_date_offset_days: 1
     has_export: true
     has_dropdown: false
     has_pagination: false
@@ -295,6 +307,7 @@ tasks:
   开机不满72小时机组:
     enabled: true
     category: "现货日前信息"
+    schedule_date_offset_days: 1
     has_export: true
     has_dropdown: false
     has_pagination: false
@@ -303,6 +316,7 @@ tasks:
   省内负荷及联络线情况:
     enabled: true
     category: "现货日前信息"
+    schedule_date_offset_days: 1
     has_export: true
     has_dropdown: false
     has_pagination: false
@@ -311,6 +325,7 @@ tasks:
   新能源出力预测(场站申报）:
     enabled: true
     category: "现货日前信息"
+    schedule_date_offset_days: 1
     has_export: true
     has_dropdown: false
     has_pagination: false
@@ -319,6 +334,7 @@ tasks:
   日前各时段出清现货电量:
     enabled: true
     category: "现货日前信息"
+    schedule_date_offset_days: 0
     has_export: true
     has_dropdown: false
     has_pagination: false

@@ -40,6 +40,12 @@ from datetime import datetime, timedelta
 
 import yaml
 
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from common.task_date_policy import build_task_schedule_ranges
 from crawler.browser import BrowserManager
 from crawler.page_crawler import PageCrawler
 from storage.csv_storage import CsvStorage
@@ -106,7 +112,8 @@ def get_enabled_tasks(config: dict, task_filter: str = None) -> dict:
 
 
 def run_crawler(config: dict, tasks: dict, start_date: str, end_date: str,
-                loss_queries=None):
+                loss_queries=None, task_date_ranges=None,
+                apply_schedule_offsets: bool = False):
     """
     执行爬虫主流程
 
@@ -117,9 +124,24 @@ def run_crawler(config: dict, tasks: dict, start_date: str, end_date: str,
         end_date: 结束日期
         loss_queries: 由 loss.txt 解析的缺失数据字典，格式为
             {任务名称: [(日期, 通道名称或None), ...]}，用于补充下载缺失文件。
+        task_date_ranges: 可选的任务日期范围覆盖，格式为
+            {任务名称: (start_date, end_date)}。定时调度模式下用于按任务应用日期偏移。
+        apply_schedule_offsets: 为 True 时，按 config.schedule 中的任务偏移规则
+            基于传入的 start_date/end_date 为每个任务计算实际日期范围。
     """
     logger = get_logger()
     target_url = config.get("target_url", "https://pmos.sx.sgcc.com.cn/#/dashboard")
+    schedule_cfg = config.get("schedule", {})
+
+    if apply_schedule_offsets and not loss_queries and not task_date_ranges:
+        trigger_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+        task_date_ranges = build_task_schedule_ranges(
+            tasks=tasks,
+            start_date=start_date,
+            end_date=end_date,
+            schedule_cfg=schedule_cfg,
+            today=trigger_date,
+        )
 
     logger.info("=" * 70)
     logger.info("山西电力交易平台爬虫 启动")
@@ -153,6 +175,14 @@ def run_crawler(config: dict, tasks: dict, start_date: str, end_date: str,
             try:
                 batch_queries = None
                 task_date_list = None
+                task_start_date, task_end_date = start_date, end_date
+
+                if task_date_ranges and task_name in task_date_ranges:
+                    task_start_date, task_end_date = task_date_ranges[task_name]
+                    logger.info(
+                        "任务「%s」使用独立日期范围: %s ~ %s",
+                        task_name, task_start_date, task_end_date
+                    )
 
                 if loss_queries and task_name in loss_queries:
                     # 缺失补充模式：从 loss_queries 中提取该任务的查询参数
@@ -180,8 +210,8 @@ def run_crawler(config: dict, tasks: dict, start_date: str, end_date: str,
                             page_crawler.crawl_task(
                                 task_name=task_name,
                                 task_config=task_config,
-                                start_date=start_date,
-                                end_date=end_date,
+                                start_date=task_start_date,
+                                end_date=task_end_date,
                                 batch_queries=batch_queries,
                             )
                         # 再执行元数据缺失日期的全量重爬
@@ -189,8 +219,8 @@ def run_crawler(config: dict, tasks: dict, start_date: str, end_date: str,
                             page_crawler.crawl_task(
                                 task_name=task_name,
                                 task_config=task_config,
-                                start_date=start_date,
-                                end_date=end_date,
+                                start_date=task_start_date,
+                                end_date=task_end_date,
                                 date_list=meta_missing_dates,
                             )
                         continue
@@ -204,8 +234,8 @@ def run_crawler(config: dict, tasks: dict, start_date: str, end_date: str,
                 page_crawler.crawl_task(
                     task_name=task_name,
                     task_config=task_config,
-                    start_date=start_date,
-                    end_date=end_date,
+                    start_date=task_start_date,
+                    end_date=task_end_date,
                     batch_queries=batch_queries,
                     date_list=task_date_list,
                 )
@@ -265,10 +295,17 @@ def run_schedule(config: dict, tasks: dict, start_date: str, end_date: str):
     - schedule.time 不为空：每天在指定时刻（如 "08:30"）触发
     - schedule.time 为空：立即执行一次，然后每隔 interval_hours 小时重复
 
-    date_mode 控制每次爬取的日期范围：
+    date_mode 控制每次调度的基准日期范围：
     - "yesterday"：仅爬昨天（start=yesterday, end=yesterday）
     - "today"：仅爬今天（start=today, end=today）
+    - "tomorrow"：仅爬明天（start=tomorrow, end=tomorrow）
     - "range"：使用传入的 start_date/end_date，end_date 每次更新为当天
+
+    当 schedule.use_task_date_offsets=true 时，
+    每个任务会在上述基准日期范围之上继续叠加任务级偏移：
+    - task.schedule_date_offset_days = 0：抓基准日
+    - task.schedule_date_offset_days = 1：抓基准日+1
+    - 未单独配置的任务使用 schedule.default_task_date_offset_days
     """
     import schedule as sched_module
 
@@ -280,19 +317,30 @@ def run_schedule(config: dict, tasks: dict, start_date: str, end_date: str):
 
     def job():
         today = datetime.now().date()
-        yesterday = (today - timedelta(days=1)).strftime("%Y-%m-%d")
-        today_str = today.strftime("%Y-%m-%d")
+        task_date_ranges = build_task_schedule_ranges(
+            tasks=tasks,
+            start_date=start_date,
+            end_date=end_date,
+            schedule_cfg=sched_cfg,
+            today=today,
+        )
 
-        if date_mode == "yesterday":
-            job_start, job_end = yesterday, yesterday
-        elif date_mode == "today":
-            job_start, job_end = today_str, today_str
-        else:  # range
-            job_start = start_date
-            job_end = today_str
+        unique_ranges = sorted(set(task_date_ranges.values()))
+        if len(unique_ranges) == 1:
+            job_start, job_end = unique_ranges[0]
+            logger.info("定时任务触发，任务日期范围统一为: %s ~ %s", job_start, job_end)
+        else:
+            logger.info("定时任务触发，任务日期范围已按配置拆分:")
+            for task_name, (task_start, task_end) in task_date_ranges.items():
+                logger.info("  - %s: %s ~ %s", task_name, task_start, task_end)
 
-        logger.info("定时任务触发，日期范围: %s ~ %s", job_start, job_end)
-        run_crawler(config, tasks, job_start, job_end)
+        run_crawler(
+            config,
+            tasks,
+            start_date,
+            end_date,
+            task_date_ranges=task_date_ranges,
+        )
 
     if trigger_time:
         logger.info("定时调度模式已启动，每天 %s 触发，date_mode=%s", trigger_time, date_mode)
@@ -346,6 +394,8 @@ def main():
                         help="列出所有可用任务")
     parser.add_argument("--loss-file", default=None,
                         help="从数据校验生成的缺失文件列表（loss.txt）批量补充下载，格式：名称,日期[,通道名称]")
+    parser.add_argument("--scheduled-run", action="store_true",
+                        help="按 schedule 配置将传入日期视为调度触发日期范围，并对任务应用日期偏移")
 
     args = parser.parse_args()
 
@@ -426,7 +476,8 @@ def main():
         run_schedule(config, tasks, start_date, end_date)
     else:
         run_crawler(config, tasks, start_date, end_date,
-                    loss_queries=loss_queries)
+                    loss_queries=loss_queries,
+                    apply_schedule_offsets=args.scheduled_run)
 
 
 if __name__ == "__main__":

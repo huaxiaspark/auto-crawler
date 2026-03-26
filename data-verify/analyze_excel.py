@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import re
+import sys
 import time
 import warnings
 from collections import Counter
@@ -30,6 +31,13 @@ from pathlib import Path
 import pandas as pd
 import yaml
 from typing import List, Optional
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from common.task_date_policy import apply_task_offset_to_dates
 
 
 _LOG_FMT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
@@ -72,6 +80,12 @@ def load_config(config_path: str = None) -> dict:
     """加载 YAML 配置文件"""
     if config_path is None:
         config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.yaml')
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
+
+def load_yaml_file(config_path: str) -> dict:
+    """加载任意 YAML 文件。"""
     with open(config_path, 'r', encoding='utf-8') as f:
         return yaml.safe_load(f)
 
@@ -434,6 +448,67 @@ def _resolve_meta_path(meta_path: str) -> str:
     return meta_path
 
 
+_crawler_cfg_cache: dict = {}
+
+
+def _load_crawler_task_policy(cfg: dict) -> dict:
+    """加载 crawler 侧任务日期策略配置。"""
+    alignment_cfg = cfg.get('global', {}).get('schedule_alignment', {})
+    if not alignment_cfg.get('enabled', False):
+        return {}
+
+    crawler_config = alignment_cfg.get('crawler_config')
+    if not crawler_config:
+        return {}
+
+    abs_path = _resolve_meta_path(crawler_config)
+    if not abs_path or not os.path.exists(abs_path):
+        logging.warning("crawler 配置文件不存在，无法应用任务日期偏移: %s", abs_path)
+        return {}
+
+    if abs_path not in _crawler_cfg_cache:
+        try:
+            _crawler_cfg_cache[abs_path] = load_yaml_file(abs_path) or {}
+        except OSError as e:
+            logging.warning("读取 crawler 配置文件失败 [%s]: %s", abs_path, e)
+            return {}
+
+    crawler_cfg = _crawler_cfg_cache[abs_path]
+    return {
+        'schedule': crawler_cfg.get('schedule', {}),
+        'tasks': crawler_cfg.get('tasks', {}),
+    }
+
+
+def resolve_validator_target_dates(cfg: dict, validator_name: str, base_dates: List[str]) -> List[str]:
+    """按 crawler 中的任务日期偏移规则换算校验目标日期。"""
+    if not base_dates:
+        return []
+
+    policy = _load_crawler_task_policy(cfg)
+    if not policy:
+        return list(base_dates)
+
+    task_cfg = policy.get('tasks', {}).get(validator_name)
+    if task_cfg is None:
+        logging.info("校验对象「%s」未在 crawler 配置中找到，沿用原校验日期", validator_name)
+        return list(base_dates)
+
+    resolved_dates = apply_task_offset_to_dates(
+        dates=base_dates,
+        task_config=task_cfg,
+        schedule_cfg=policy.get('schedule', {}),
+    )
+    if resolved_dates != list(base_dates):
+        logging.info(
+            "校验对象「%s」应用任务日期偏移后，日期范围改为: %s -> %s",
+            validator_name,
+            f"{base_dates[0]} ~ {base_dates[-1]}",
+            f"{resolved_dates[0]} ~ {resolved_dates[-1]}",
+        )
+    return resolved_dates
+
+
 def _load_dynamic_channels(meta_path: str, task_name: str,
                            target_date: str) -> Optional[List[str]]:
     """
@@ -746,9 +821,13 @@ def run_validator(validator_cfg: dict, cfg: dict, target_dates: list):
     print(f"校验对象: {name}")
     print('=' * 80)
 
-    # 发现文件
-    files = discover_files(directory, validator_cfg)
-    print(f"找到文件: {len(files)} 个")
+    effective_dates = resolve_validator_target_dates(cfg, name, target_dates)
+    effective_date_set = set(effective_dates)
+
+    # 发现文件，并收紧到目标日期范围，避免误删范围外文件
+    discovered_files = discover_files(directory, validator_cfg)
+    files = [f for f in discovered_files if f['date'] in effective_date_set]
+    print(f"找到文件: {len(files)} 个（目标日期命中 {len(effective_dates)} 天，总扫描 {len(discovered_files)} 个）")
 
     # 1. 内容一致性校验（先校验内容，不通过则删除文件）
     combined_errors = []
@@ -812,7 +891,7 @@ def run_validator(validator_cfg: dict, cfg: dict, target_dates: list):
     if checks.get('completeness', {}).get('enabled'):
         print(f"\n--- 文件完整性校验 ---")
         remaining_files = [f for f in files if f['filepath'] not in deleted_paths]
-        for date in target_dates:
+        for date in effective_dates:
             ok, info = check_completeness(remaining_files, date, validator_cfg)
             status = "✅" if ok else "❌"
             if info.get('meta_missing'):
@@ -864,6 +943,10 @@ def main(config_path: str = None):
     parser.add_argument('--start', type=str, help='校验起始日期，格式 YYYY-MM-DD，覆盖 config.yaml 中的设置')
     parser.add_argument('--end', type=str, help='校验结束日期，格式 YYYY-MM-DD，覆盖 config.yaml 中的设置')
     parser.add_argument('--config', type=str, help='配置文件路径，默认使用脚本同目录下的 config.yaml')
+    parser.add_argument('--enable-schedule-alignment', action='store_true',
+                        help='强制启用任务日期对齐，将输入日期视为调度触发日期范围')
+    parser.add_argument('--disable-schedule-alignment', action='store_true',
+                        help='强制关闭任务日期对齐，将输入日期直接视为目标数据日期范围')
     args = parser.parse_args()
 
     if args.config:
@@ -871,6 +954,16 @@ def main(config_path: str = None):
 
     cfg = load_config(config_path)
     g = cfg['global']
+
+    if args.enable_schedule_alignment and args.disable_schedule_alignment:
+        logging.error("--enable-schedule-alignment 与 --disable-schedule-alignment 不能同时使用")
+        return
+
+    alignment_cfg = g.setdefault('schedule_alignment', {})
+    if args.enable_schedule_alignment:
+        alignment_cfg['enabled'] = True
+    elif args.disable_schedule_alignment:
+        alignment_cfg['enabled'] = False
 
     # 初始化日志
     log_dir = g.get('log_dir', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs'))
@@ -917,6 +1010,8 @@ def main(config_path: str = None):
     dr = g['date_range']
     target_dates = generate_date_range(dr['start'], dr['end'])
     print(f"校验日期范围: {dr['start']} 至 {dr['end']}（共 {len(target_dates)} 天）")
+    if g.get('schedule_alignment', {}).get('enabled'):
+        print("已启用定时任务日期对齐：校验日期将按 crawler 配置中的任务偏移规则换算")
 
     summaries = []
     all_missing = []

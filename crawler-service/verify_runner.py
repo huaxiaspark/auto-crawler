@@ -6,12 +6,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def run(config: dict, start: str, end: str):
+def run(config: dict, start: str, end: str, scheduled_run: bool = False):
     """调用 data-verify/analyze_excel.py 执行校验。"""
     script = os.path.abspath(config["verify"]["script_path"])
-    cmd = [sys.executable, script, "--start", start, "--end", end]
+    config_path = os.path.abspath(config["verify"]["config_path"])
+    cmd = [sys.executable, script, "--config", config_path, "--start", start, "--end", end]
+    cmd.append("--enable-schedule-alignment" if scheduled_run else "--disable-schedule-alignment")
 
-    logger.info(f"[Step 2] 启动校验，start={start}，end={end}")
+    logger.info(
+        f"[Step 2] 启动校验，start={start}，end={end}，scheduled_run={scheduled_run}"
+    )
     logger.debug(f"校验命令：{' '.join(cmd)}")
 
     result = subprocess.run(cmd, capture_output=True, text=True, cwd=os.path.dirname(script))

@@ -18,6 +18,14 @@ global:
     start: "2025-01-01"
     end: "2025-01-07"
 
+  # 定时任务日期对齐
+  # 启用后，会读取 crawler/config.yaml 中的 schedule 与 tasks 配置，
+  # 将这里的 date_range 视为“任务触发日期范围”，再按各任务的 schedule_date_offset_days
+  # 换算为实际应存在的数据文件日期，保证校验侧与爬取侧使用同一套日期规则。
+  schedule_alignment:
+    enabled: true
+    crawler_config: "../crawler/config.yaml"
+
   # 输出报告目录（默认为脚本所在目录）
   output_directory: null  # null 表示使用脚本所在目录
 

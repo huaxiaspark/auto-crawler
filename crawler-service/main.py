@@ -1,6 +1,6 @@
 import argparse
 import sys
-from datetime import date, timedelta
+from datetime import date
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -30,17 +30,23 @@ if __name__ == "__main__":
         sched_cfg = config["schedule"]
         cron_expr = sched_cfg.get("cron", "30 8 * * *")
         timezone = sched_cfg.get("timezone", "Asia/Shanghai")
-        offset_days = sched_cfg.get("date_offset_days", -1)
 
         logger.info(
             f"定时日增模式已启动，cron={cron_expr}，timezone={timezone}，"
-            f"date_offset_days={offset_days}，等待首次触发..."
+            "当前由 crawler/config.yaml 的任务级日期偏移规则控制实际取数日期，"
+            "等待首次触发..."
         )
 
         def scheduled_job():
-            target = (date.today() + timedelta(days=offset_days)).strftime("%Y-%m-%d")
-            logger.info(f"定时任务触发，目标日期={target}")
-            pipeline.run(config=config, start=target, end=target, tasks=None)
+            trigger_date = date.today().strftime("%Y-%m-%d")
+            logger.info(f"定时任务触发，触发日期={trigger_date}")
+            pipeline.run(
+                config=config,
+                start=trigger_date,
+                end=trigger_date,
+                tasks=None,
+                scheduled_run=True,
+            )
 
         scheduler = BlockingScheduler(timezone=timezone)
         scheduler.add_job(scheduled_job, CronTrigger.from_crontab(cron_expr, timezone=timezone))
@@ -54,4 +60,4 @@ if __name__ == "__main__":
             sys.exit(1)
         tasks = args.task.split(",") if args.task else None
         logger.info(f"手动批量模式，start={args.start}，end={args.end}，tasks={tasks or '全部'}")
-        pipeline.run(config=config, start=args.start, end=args.end, tasks=tasks)
+        pipeline.run(config=config, start=args.start, end=args.end, tasks=tasks, scheduled_run=False)

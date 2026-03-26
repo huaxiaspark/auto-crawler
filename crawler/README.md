@@ -226,6 +226,12 @@ python main.py --validate
 python main.py --schedule
 ```
 
+定时模式下，脚本先根据 `schedule.date_mode` 计算“基准日期”，再按每个任务的 `schedule_date_offset_days` 计算实际爬取日期。当前默认配置为：
+
+- `日前各时段出清现货电量`、`日前节点边际电价` 抓取当天
+- `断面约束`、`非市场化机组出力` 抓取明天
+- 其他未单独配置任务抓取昨天
+
 ---
 
 ## 命令行参数
@@ -337,9 +343,11 @@ request:
 
 ```yaml
 schedule:
-  enabled: false          # 保留字段，代码中暂未读取；定时模式通过 --schedule 参数控制
-  cron: "0 8 * * *"      # 保留字段，代码中暂未读取；实际调度间隔由 interval_hours 控制
-  interval_hours: 24      # 调度间隔（小时），--schedule 模式下每隔此时间重新执行一次爬取
+  time: "08:30"                    # 每天触发时间；为空则立即执行并按 interval_hours 轮询
+  interval_hours: 24               # time 为空时生效
+  date_mode: "today"               # 定时模式基准日期：yesterday / today / tomorrow / range
+  use_task_date_offsets: true      # 是否启用任务级日期偏移
+  default_task_date_offset_days: -1  # 未单独配置任务时默认偏移天数
 ```
 
 ### 任务开关
@@ -369,6 +377,7 @@ tasks:
   断面约束:
     enabled: true
     category: "现货日前信息"
+    schedule_date_offset_days: 1   # 定时模式抓取基准日 + 1 天
     has_export: true
     has_dropdown: false
     has_pagination: true

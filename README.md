@@ -100,7 +100,14 @@ Step 4  整理文件 → 打包 → 上传 MinIO → 通知服务器 B
 python main.py --mode scheduled
 ```
 
-服务启动后进入阻塞调度循环，按 `config.yaml` 中 `schedule.cron` 配置的 cron 表达式定时触发（默认每天 08:30），每次爬取 `date_offset_days`（默认 `-1`，即昨天）对应的数据。
+服务启动后进入阻塞调度循环，按 `config.yaml` 中 `schedule.cron` 配置的 cron 表达式定时触发。`crawler-service` 只负责给本次流程传入“触发日期”，真正的取数日期由 `crawler/config.yaml` 中的任务级规则决定：
+
+- `schedule.date_mode` 定义基准日期，默认按“当天触发日”计算
+- `tasks.<任务名>.schedule_date_offset_days` 定义任务相对基准日的偏移
+- 未单独配置的任务使用 `schedule.default_task_date_offset_days`
+
+因此可同时满足“部分任务抓当天、部分任务抓明天、其他任务抓昨天”的需求；`data-verify` 也会读取同一套规则换算校验日期，保证校验与重爬一致。
+如需排查某次定时任务，也可以手工传入对应触发日期复现，系统会按传入触发日期而不是当前系统日期计算任务偏移。
 
 **手动批量模式**
 
@@ -110,6 +117,7 @@ python main.py --mode batch --start 2025-01-01 --end 2025-01-31 --task 日前备
 ```
 
 指定日期范围和任务范围立即执行一次后退出，适用于历史数据补录。
+批量模式下不会启用任务级日期偏移：爬取、校验、重爬都直接以 `--start/--end` 作为目标数据日期范围。
 
 ### 校验与重爬逻辑
 
@@ -121,16 +129,16 @@ python main.py --mode batch --start 2025-01-01 --end 2025-01-31 --task 日前备
 schedule:
   cron: "30 8 * * *"       # 触发时间（标准 cron 表达式）
   timezone: "Asia/Shanghai"
-  date_offset_days: -1     # 目标日期偏移（-1=昨天）
 
 crawler:
   script_path: "../crawler/main.py"
-  config_path: "../crawler/config.yaml"
+  config_path: "../crawler/config.yaml"  # crawler-service 会显式通过 --config 传给爬虫
   data_dir: "../crawler/data"
   cleanup_after_upload: true  # 上传后是否清除 crawler/data/
 
 verify:
   script_path: "../data-verify/analyze_excel.py"
+  config_path: "../data-verify/config.yaml"  # crawler-service 会显式通过 --config 传给校验脚本
   loss_file: "../data-verify/loss.txt"
   max_retry_rounds: 3
   retry_interval_seconds: 30

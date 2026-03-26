@@ -32,6 +32,9 @@ global:
   date_range:
     start: "2023-01-01"
     end: "2026-01-31"
+  schedule_alignment:
+    enabled: true
+    crawler_config: "../crawler/config.yaml"
 ```
 
 **运行校验**
@@ -61,8 +64,13 @@ python analyze_excel.py --config /path/to/custom_config.yaml --start 2025-01-01 
 | `--start` | 校验起始日期，覆盖 config.yaml | `--start 2025-01-01` |
 | `--end` | 校验结束日期，覆盖 config.yaml | `--end 2025-01-31` |
 | `--config` | 自定义配置文件路径 | `--config /path/to/config.yaml` |
+| `--enable-schedule-alignment` | 强制启用任务日期对齐 | `--enable-schedule-alignment` |
+| `--disable-schedule-alignment` | 强制关闭任务日期对齐 | `--disable-schedule-alignment` |
 
 命令行参数优先级高于 `config.yaml`，未传入的参数沿用配置文件中的值。
+典型用法：
+- 定时链路使用 `--enable-schedule-alignment`
+- 手动批量补录使用 `--disable-schedule-alignment`
 
 ## 配置说明
 
@@ -73,9 +81,13 @@ python analyze_excel.py --config /path/to/custom_config.yaml --start 2025-01-01 
 | `data_directory` | 数据文件目录（递归扫描） | `"/data/exports"` |
 | `date_range.start` | 校验起始日期 | `"2023-01-01"` |
 | `date_range.end` | 校验结束日期 | `"2026-01-31"` |
+| `schedule_alignment.enabled` | 是否按 crawler 的任务日期偏移规则换算校验日期 | `true` |
+| `schedule_alignment.crawler_config` | crawler 配置文件路径，用于读取 `schedule` 与任务偏移配置 | `"../crawler/config.yaml"` |
 | `output_directory` | 报告输出目录，`null` 表示脚本所在目录 | `null` |
 | `report_files.missing` | 缺失文件报告文件名 | `"loss.txt"` |
 | `report_files.errors` | 错误报告文件名 | `"validation_errors.txt"` |
+
+启用 `schedule_alignment` 后，`global.date_range` 表示“定时任务触发日期范围”，校验器会按 `crawler/config.yaml` 中每个任务的 `schedule_date_offset_days` 自动换算为实际文件日期，保证缺失校验与爬虫定时取数规则一致。
 
 **性能参数 `global.performance`**
 

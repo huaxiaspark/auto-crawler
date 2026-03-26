@@ -64,14 +64,17 @@ def _flatten_and_classify(data_dir: str):
     logger.info(f"[Step 4] 文件整理完成，data_dir={data_dir}")
 
 
-def _run_verify_and_retry(start: str, end: str, config: dict) -> bool:
+def _run_verify_and_retry(start: str, end: str, config: dict,
+                          scheduled_run: bool = False) -> bool:
     """执行校验，失败则批量重爬，最多重试 max_retry_rounds 轮。返回是否最终通过。"""
     max_rounds = config["verify"]["max_retry_rounds"]
     interval = config["verify"]["retry_interval_seconds"]
     loss_path = os.path.abspath(config["verify"]["loss_file"])
 
-    logger.info(f"[Step 2] 开始数据校验，日期范围={start}~{end}")
-    verify_runner.run(config=config, start=start, end=end)
+    logger.info(
+        f"[Step 2] 开始数据校验，日期范围={start}~{end}，scheduled_run={scheduled_run}"
+    )
+    verify_runner.run(config=config, start=start, end=end, scheduled_run=scheduled_run)
 
     if verify_runner.is_pass(loss_path):
         logger.info("[Step 2] 初始校验通过，进入打包上传步骤")
@@ -85,7 +88,7 @@ def _run_verify_and_retry(start: str, end: str, config: dict) -> bool:
         logger.warning(f"[Step 3] 第 {round_num}/{max_rounds} 轮重爬开始，loss_file={loss_path}")
         crawler_runner.run_with_loss_file(config=config, loss_file_abs=loss_path)
         logger.info(f"[Step 3] 第 {round_num} 轮重爬完成，开始校验")
-        verify_runner.run(config=config, start=start, end=end)
+        verify_runner.run(config=config, start=start, end=end, scheduled_run=scheduled_run)
 
         if verify_runner.is_pass(loss_path):
             logger.info(f"[Step 3] 第 {round_num} 轮重爬后校验通过，进入打包上传步骤")
@@ -104,24 +107,39 @@ def _run_verify_and_retry(start: str, end: str, config: dict) -> bool:
     return False
 
 
-def run(config: dict, start: str, end: str, tasks: list = None):
+def run(config: dict, start: str, end: str, tasks: list = None,
+        scheduled_run: bool = False):
     """完整流程：爬取 → 校验 → [重爬] → 打包上传 → 通知。"""
     t0 = datetime.now()
-    logger.info(f"pipeline.run 开始，start={start}，end={end}，tasks={tasks or '全部'}")
+    logger.info(
+        f"pipeline.run 开始，start={start}，end={end}，tasks={tasks or '全部'}，"
+        f"scheduled_run={scheduled_run}"
+    )
 
     categories = _get_categories(config, tasks)
     logger.debug(f"本次 categories={categories}")
 
     # Step 1: 爬取
     try:
-        crawler_runner.run(config=config, start=start, end=end, tasks=tasks)
+        crawler_runner.run(
+            config=config,
+            start=start,
+            end=end,
+            tasks=tasks,
+            scheduled_run=scheduled_run,
+        )
     except Exception:
         logger.error("[Step 1] 爬虫失败，终止当前流程", exc_info=True)
         return
 
     # Step 2 & 3: 校验 + 重爬
     try:
-        _run_verify_and_retry(start=start, end=end, config=config)
+        _run_verify_and_retry(
+            start=start,
+            end=end,
+            config=config,
+            scheduled_run=scheduled_run,
+        )
     except Exception:
         logger.error("[Step 2/3] 校验/重爬异常，终止当前流程", exc_info=True)
         return
