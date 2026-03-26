@@ -108,7 +108,7 @@ secondary_freq_period_offsets:
 | `clearing_overview_csv` | 市场出清概况（CSV） | `file_encoding`, `header_row` |
 | `unit_commitment` | 机组开机安排（文本映射） | `columns`, `name_col`, `status_col_keywords`, `value_map` |
 | `node_factor` | 节点分配因子 | `columns`, `name_col`, `value_col` |
-| `maintenance_plan` | 设备检修计划（保留行结构） | `skip_rows`, `columns` |
+| `maintenance_plan` | 设备检修计划（按设备类型分宽表） | `skip_rows`, `columns` |
 | `secondary_freq_clearing` | 二次调频出清结果 | `sheet_name`, `date_col`, `period_col`, `output_cols` |
 | `coal_unit_capacity` | 煤电机组最大出力认定 | `sheet_name`, `name_col`, `ffill_cols`, `outputs`, `value_map` |
 | `unit_generation_curve` | 机组实际发电曲线（宽转长再转宽） | `sheet_name`, `name_col`, `date_col`, `exclude_cols` |

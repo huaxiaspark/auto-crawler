@@ -133,6 +133,15 @@ def _write_cleanup_note(out_dir: Path, note_filename: str, notes: list[str]) -> 
     (out_dir / note_filename).write_text("\n".join(content), encoding="utf-8")
 
 
+def _fmt_note_time(val) -> str:
+    if pd.isna(val):
+        return "空"
+    try:
+        return pd.to_datetime(val).strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return str(val)
+
+
 def finalize_wide_output(
     wide: pd.DataFrame,
     out_dir: Path,
@@ -685,11 +694,16 @@ def process_node_factor(input_dir: Path, task: dict) -> None:
 
 
 def process_maintenance_plan(input_dir: Path, task: dict) -> None:
-    """输变电设备检修计划：保留原始行结构"""
+    """输变电设备检修计划：按设备类型输出值为 1 的宽表"""
     out_dir = ensure_output_dir(task["output_dir"])
+    for old_file in out_dir.glob("*"):
+        if old_file.is_file():
+            old_file.unlink()
     cols = task["columns"]
     skip = task.get("skip_rows", 2)
     all_data = []
+    deleted_notes: list[str] = []
+    note_filename = task.get("cleanup_note_file", "数据删除说明.md")
 
     for f in sorted(input_dir.glob("*.xlsx")):
         try:
@@ -704,20 +718,53 @@ def process_maintenance_plan(input_dir: Path, task: dict) -> None:
                     df[tc] = pd.to_datetime(df[tc], errors="coerce")
             df = df.dropna(subset=["日期", cols[2]])
             df["timestamp"] = df["日期"].apply(extract_date_000)
-            all_data.append(df)
+
+            invalid_mask = (
+                (df["timestamp"] == "")
+                | df["开始时间"].isna()
+                | df["结束时间"].isna()
+                | (df["日期"] < df["开始时间"])
+                | (df["日期"] > df["结束时间"])
+            )
+            invalid_rows = df[invalid_mask].copy()
+            for _, row in invalid_rows.iterrows():
+                deleted_notes.append(
+                    f"删除数据：文件《{f.name}》中设备类型={row.get('设备类型', '')}，"
+                    f"设备名称={row.get('设备名称', '')}，日期={_fmt_note_time(row.get('日期'))}，"
+                    f"开始时间={_fmt_note_time(row.get('开始时间'))}，"
+                    f"结束时间={_fmt_note_time(row.get('结束时间'))}；"
+                    "原因：日期不在开始时间和结束时间范围内，或时间信息无法解析。"
+                )
+            df = df[~invalid_mask].copy()
+            if not df.empty:
+                all_data.append(df[["timestamp", "设备类型", "设备名称"]])
         except Exception as e:
             logging.warning("跳过 %s: %s", f.name, e)
 
     if not all_data:
+        _write_cleanup_note(out_dir, note_filename, deleted_notes)
         logging.warning("未读取到有效数据")
         return
     merged = pd.concat(all_data, ignore_index=True)
-    merged = merged.sort_values(["timestamp", cols[2]]).reset_index(drop=True)
-    drop_cols = [c for c in ["序号", "日期"] if c in merged.columns]
-    merged = merged.drop(columns=drop_cols)
-    other_cols = [c for c in merged.columns if c != "timestamp"]
-    merged = merged[["timestamp"] + other_cols]
-    save_csv_with_split(merged, out_dir / task["output_file"])
+    merged["值"] = 1
+    merged = merged.drop_duplicates(subset=["timestamp", "设备类型", "设备名称"])
+
+    for device_type, sub in merged.groupby("设备类型", dropna=True):
+        device_type_str = str(device_type).strip()
+        if not device_type_str:
+            continue
+        wide = sub.pivot_table(
+            index="timestamp",
+            columns="设备名称",
+            values="值",
+            aggfunc="first",
+            fill_value=1,
+        )
+        wide.reset_index(inplace=True)
+        wide = wide.sort_values("timestamp").reset_index(drop=True)
+        save_csv_with_split(wide, out_dir / f"{task['output_file']}{device_type_str}")
+
+    _write_cleanup_note(out_dir, note_filename, deleted_notes)
     logging.info("已输出: %s", out_dir)
 
 
