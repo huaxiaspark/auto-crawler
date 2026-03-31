@@ -80,7 +80,7 @@ tasks:
     export_type: "原样导出"
 
   日前备用总量:
-    enabled: false
+    enabled: true
     category: "现货出清结果"
     schedule_date_offset_days: 0
     has_export: true
@@ -98,7 +98,7 @@ tasks:
 
   # --- 现货实时数据 ---
   实时各时段出清现货电量:
-    enabled: false
+    enabled: true
     category: "现货实时数据"
     has_export: true
     has_dropdown: false
@@ -106,7 +106,7 @@ tasks:
     export_type: "原样导出"
 
   实时备用总量:
-    enabled: false
+    enabled: true
     category: "现货实时数据"
     has_export: true
     has_dropdown: false
@@ -114,7 +114,7 @@ tasks:
     export_type: "原样导出"
 
   实时节点边际电价:
-    enabled: false
+    enabled: true
     category: "现货实时数据"
     has_export: true
     has_dropdown: true
@@ -124,7 +124,7 @@ tasks:
     export_all: true      # 导出按钮可一次导出所有节点数据，无需逐一选择节点
 
   实时输电断面约束及阻塞:
-    enabled: false
+    enabled: true
     category: "现货实时数据"
     has_export: true
     has_dropdown: true
@@ -134,7 +134,7 @@ tasks:
     export_type: "原样导出"
 
   断面约束情况及影子价格:
-    enabled: false
+    enabled: true
     category: "现货实时数据"
     has_export: true
     has_dropdown: true
@@ -144,7 +144,7 @@ tasks:
     export_type: "原样导出"
 
   重要通道实际输电情况:
-    enabled: false
+    enabled: true
     category: "现货实时数据"
     has_export: true
     has_dropdown: true
@@ -154,7 +154,7 @@ tasks:
     export_type: "原样导出"
 
   机组实际发电曲线:
-    enabled: false
+    enabled: true
     category: "现货实时数据"
     has_export: true
     has_dropdown: true
@@ -196,7 +196,7 @@ tasks:
 
   # --- 现货日前信息 ---
   抽蓄电站水位:
-    enabled: false
+    enabled: true
     category: "现货日前信息"
     has_export: true
     has_dropdown: false
@@ -204,7 +204,7 @@ tasks:
     export_type: "原样导出"
 
   断面约束:
-    enabled: false
+    enabled: true
     category: "现货日前信息"
     schedule_date_offset_days: 1
     has_export: true
@@ -214,7 +214,7 @@ tasks:
     export_type: "原样导出"
 
   日前联络线计划:
-    enabled: false
+    enabled: true
     category: "现货日前信息"
     schedule_date_offset_days: 1
     has_export: true
@@ -226,7 +226,7 @@ tasks:
     export_type: "原样导出"
 
   输变电设备检修计划:
-    enabled: false
+    enabled: true
     category: "现货日前信息"
     has_export: true
     has_dropdown: false
@@ -235,7 +235,7 @@ tasks:
     export_type: "原样导出"
 
   输电通道可用容量:
-    enabled: false
+    enabled: true
     category: "现货日前信息"
     schedule_date_offset_days: 1
     has_export: true
@@ -247,7 +247,7 @@ tasks:
     export_type: "原样导出"
 
   日前机组开机安排:
-    enabled: false
+    enabled: true
     category: "现货日前信息"
     schedule_date_offset_days: 0
     has_export: true
@@ -258,7 +258,7 @@ tasks:
     export_all: true      # 导出按钮可一次导出所有机组数据，无需逐一选择机组
 
   日前节点边际电价:
-    enabled: false
+    enabled: true
     category: "现货日前信息"
     schedule_date_offset_days: 0
     has_export: true
@@ -269,7 +269,7 @@ tasks:
     export_all: true      # 导出按钮可一次导出所有节点数据，无需逐一选择节点
 
   日前正负备用需求:
-    enabled: false
+    enabled: true
     category: "现货日前信息"
     schedule_date_offset_days: 1
     has_export: true
@@ -342,7 +342,7 @@ tasks:
 
   # --- 综合查询 ---
   节点分配因子:
-    enabled: false
+    enabled: true
     category: "综合查询"
     subcategory: "供需与约束 > 参数信息"
     has_export: true
@@ -351,7 +351,7 @@ tasks:
     export_type: "原样导出"
 
   二次调频出清结果:
-    enabled: false
+    enabled: true
     category: "综合查询"
     subcategory: "市场运营"
     has_export: true

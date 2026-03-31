@@ -51,8 +51,9 @@ validators:
   # 日前联络线计划 - 专项校验（含通道完整性，动态通道模式）
   # ----------------------------------------------------------
   - name: "日前联络线计划"
-    enabled: false
+    enabled: true
 
+    # 文件匹配规则
     file_pattern:
       prefix: "日前联络线计划_"
       extensions: [".xlsx"]
@@ -96,7 +97,7 @@ validators:
   # 机组实际发电曲线 - 仅日期一致性校验
   # ----------------------------------------------------------
   - name: "机组实际发电曲线"
-    enabled: false
+    enabled: true
 
     file_pattern:
       prefix: "机组实际发电曲线_"
@@ -118,7 +119,7 @@ validators:
   # 实时各时段出清现货电量 - 日期一致性校验
   # ----------------------------------------------------------
   - name: "实时各时段出清现货电量"
-    enabled: false
+    enabled: true
 
     file_pattern:
       prefix: "实时各时段出清现货电量_"
@@ -140,7 +141,7 @@ validators:
   # 实时备用总量 - 日期一致性校验
   # ----------------------------------------------------------
   - name: "实时备用总量"
-    enabled: false
+    enabled: true
 
     file_pattern:
       prefix: "实时备用总量_"
@@ -162,7 +163,7 @@ validators:
   # 实时节点边际电价 - 日期一致性校验
   # ----------------------------------------------------------
   - name: "实时节点边际电价"
-    enabled: false
+    enabled: true
 
     file_pattern:
       prefix: "实时节点边际电价_"
@@ -184,7 +185,7 @@ validators:
   # 实时输电断面约束及阻塞 - 日期一致性校验
   # ----------------------------------------------------------
   - name: "实时输电断面约束及阻塞"
-    enabled: false
+    enabled: true
 
     file_pattern:
       prefix: "实时输电断面约束及阻塞_"
@@ -206,7 +207,7 @@ validators:
   # 抽蓄电站水位 - 日期一致性校验
   # ----------------------------------------------------------
   - name: "抽蓄电站水位"
-    enabled: false
+    enabled: true
 
     file_pattern:
       prefix: "抽蓄电站水位_"
@@ -228,7 +229,7 @@ validators:
   # 断面约束 - 日期一致性校验
   # ----------------------------------------------------------
   - name: "断面约束"
-    enabled: false
+    enabled: true
 
     file_pattern:
       prefix: "断面约束_"
@@ -250,7 +251,7 @@ validators:
   # 断面约束情况及影子价格 - 日期一致性校验
   # ----------------------------------------------------------
   - name: "断面约束情况及影子价格"
-    enabled: false
+    enabled: true
 
     file_pattern:
       prefix: "断面约束情况及影子价格_"
@@ -272,7 +273,7 @@ validators:
   # 日前备用总量 - 日期一致性校验
   # ----------------------------------------------------------
   - name: "日前备用总量"
-    enabled: false
+    enabled: true
 
     file_pattern:
       prefix: "日前备用总量_"
@@ -316,7 +317,7 @@ validators:
   # 日前机组开机安排 - 日期一致性校验
   # ----------------------------------------------------------
   - name: "日前机组开机安排"
-    enabled: false
+    enabled: true
 
     file_pattern:
       prefix: "日前机组开机安排_"
@@ -338,7 +339,7 @@ validators:
   # 日前正负备用需求 - 日期一致性校验
   # ----------------------------------------------------------
   - name: "日前正负备用需求"
-    enabled: false
+    enabled: true
 
     file_pattern:
       prefix: "日前正负备用需求_"
@@ -360,7 +361,7 @@ validators:
   # 日前节点边际电价 - 日期一致性校验
   # ----------------------------------------------------------
   - name: "日前节点边际电价"
-    enabled: false
+    enabled: true
 
     file_pattern:
       prefix: "日前节点边际电价_"
@@ -382,7 +383,7 @@ validators:
   # 节点分配因子 - 日期一致性校验
   # ----------------------------------------------------------
   - name: "节点分配因子"
-    enabled: false
+    enabled: true
 
     file_pattern:
       prefix: "节点分配因子_"
@@ -404,7 +405,7 @@ validators:
   # 输变电设备检修计划 - 日期一致性校验
   # ----------------------------------------------------------
   - name: "输变电设备检修计划"
-    enabled: false
+    enabled: true
 
     file_pattern:
       prefix: "输变电设备检修计划_"
@@ -426,7 +427,7 @@ validators:
   # 输电通道可用容量 - 日期一致性校验
   # ----------------------------------------------------------
   - name: "输电通道可用容量"
-    enabled: false
+    enabled: true
 
     file_pattern:
       prefix: "输电通道可用容量_"
@@ -448,7 +449,7 @@ validators:
   # 重要通道实际输电情况 - 日期一致性校验
   # ----------------------------------------------------------
   - name: "重要通道实际输电情况"
-    enabled: false
+    enabled: true
 
     file_pattern:
       prefix: "重要通道实际输电情况_"
@@ -776,7 +777,7 @@ validators:
   # 二次调频出清结果 - 日期一致性校验
   # ----------------------------------------------------------
   - name: "二次调频出清结果"
-    enabled: false
+    enabled: true
 
     file_pattern:
       prefix: "二次调频出清结果_"
