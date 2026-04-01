@@ -872,7 +872,7 @@ def run_validator(validator_cfg: dict, cfg: dict, target_dates: list):
                 if _should_delete(date_ok, date_reason, channel_ok, channel_reason):
                     try:
                         os.remove(f['filepath'])
-                        print(f"  🗑 已删除: {f['filename']}")
+                        print(f"  [DEL] 已删除: {f['filename']}")
                         logging.info("已删除问题文件: %s", f['filename'])
                         deleted_count += 1
                         deleted_paths.add(f['filepath'])
@@ -895,7 +895,7 @@ def run_validator(validator_cfg: dict, cfg: dict, target_dates: list):
         remaining_files = [f for f in files if f['filepath'] not in deleted_paths]
         for date in effective_dates:
             ok, info = check_completeness(remaining_files, date, validator_cfg)
-            status = "✅" if ok else "❌"
+            status = "[PASS]" if ok else "[FAIL]"
             if info.get('meta_missing'):
                 print(f"{status} {date}: 元数据缺失，无法校验")
             else:
@@ -1043,11 +1043,11 @@ def main(config_path: str = None):
     print("校验汇总")
     print("=" * 80)
     for s in summaries:
-        status = "✅" if s['missing_count'] == 0 and s['filtered_error_count'] == 0 else "❌"
+        status = "[PASS]" if s['missing_count'] == 0 and s['filtered_error_count'] == 0 else "[FAIL]"
         print(f"{status} [{s['name']}] 文件: {s['total_files']}  删除: {s['deleted_count']}  缺失: {s['missing_count']}  错误: {s['filtered_error_count']}（含已过滤: {s['error_count']}）")
     print("=" * 80)
     if total_missing == 0 and total_errors == 0 and total_deleted == 0:
-        print("✅ 所有校验通过，数据完整无误！")
+        print("[PASS] 所有校验通过，数据完整无误！")
         logging.info("校验完成：所有数据完整无误")
     else:
         parts = []
@@ -1057,7 +1057,7 @@ def main(config_path: str = None):
             parts.append(f"缺失文件 {total_missing} 个")
         if total_errors:
             parts.append(f"内容错误 {total_errors} 个")
-        print(f"❌ 校验完成，发现问题：{' / '.join(parts)}")
+        print(f"[FAIL] 校验完成，发现问题：{' / '.join(parts)}")
         logging.warning("校验完成，发现问题：%s", ' / '.join(parts))
 
 
