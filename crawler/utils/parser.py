@@ -28,7 +28,7 @@ def parse_loss_file(filepath: str) -> Dict[str, List[Tuple[str, Optional[str]]]]
         {任务名称: [(日期, 通道名称或None), ...]}
     """
     result: Dict[str, List[Tuple[str, Optional[str]]]] = {}
-    with open(filepath, "r", encoding="utf-8") as f:
+    with open(filepath, "r", encoding="utf-8-sig") as f:
         for line_no, line in enumerate(f, 1):
             line = line.strip()
             if not line or line.startswith("#"):

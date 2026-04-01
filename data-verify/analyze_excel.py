@@ -74,6 +74,31 @@ class _SizedTimedRotatingFileHandler(TimedRotatingFileHandler):
 warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
 
 
+def configure_stdio() -> None:
+    """仅在 Windows 上统一标准输出编码，降低控制台中文乱码概率。"""
+    if os.name != "nt":
+        return
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream and hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
+def _format_read_exception(exc: Exception) -> str:
+    """将底层读取异常转换为更易理解的中文提示。"""
+    message = str(exc).strip() or repr(exc)
+    if isinstance(exc, ImportError) or "Missing optional dependency 'openpyxl'" in message:
+        return (
+            "缺少 Excel 解析依赖 openpyxl。"
+            " 请先执行: python -m pip install openpyxl"
+            " 或 python -m pip install -r requirements.txt"
+        )
+    return f"无法打开文件: {message}"
+
+
 # ============================================================
 # 配置加载
 # ============================================================
@@ -263,7 +288,7 @@ def check_file_readable(filepath: str) -> tuple:
                 return False, "Excel文件没有工作表"
         return True, None
     except Exception as e:
-        return False, f"无法打开文件: {e}"
+        return False, _format_read_exception(e)
 
 
 # ============================================================
@@ -630,7 +655,7 @@ def _output_path(cfg: dict, filename: str) -> str:
 
 def write_missing_report(cfg: dict, missing_files: list) -> str:
     path = _output_path(cfg, cfg['global']['report_files']['missing'])
-    with open(path, 'w', encoding='utf-8') as f:
+    with open(path, 'w', encoding='utf-8-sig') as f:
         f.write("# 缺失文件列表\n")
         f.write(f"# 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write("# 格式: 名称,日期,通道名称\n")
@@ -686,7 +711,7 @@ def write_errors_report(cfg: dict, all_validator_errors: list) -> str:
     all_validator_errors: [{'name': str, 'errors': list, 'filters': dict}, ...]
     """
     path = _output_path(cfg, cfg['global']['report_files']['errors'])
-    with open(path, 'w', encoding='utf-8') as f:
+    with open(path, 'w', encoding='utf-8-sig') as f:
         f.write("=" * 80 + "\n")
         f.write("数据校验错误详细报告\n")
         f.write(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
@@ -941,6 +966,7 @@ def run_validator(validator_cfg: dict, cfg: dict, target_dates: list):
 
 def main(config_path: str = None):
     """主入口"""
+    configure_stdio()
     parser = argparse.ArgumentParser(description='Excel文件数据校验系统')
     parser.add_argument('--start', type=str, help='校验起始日期，格式 YYYY-MM-DD，覆盖 config.yaml 中的设置')
     parser.add_argument('--end', type=str, help='校验结束日期，格式 YYYY-MM-DD，覆盖 config.yaml 中的设置')

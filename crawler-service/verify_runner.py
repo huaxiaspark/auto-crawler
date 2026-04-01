@@ -18,7 +18,14 @@ def run(config: dict, start: str, end: str, scheduled_run: bool = False):
     )
     logger.debug(f"校验命令：{' '.join(cmd)}")
 
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=os.path.dirname(script))
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        cwd=os.path.dirname(script),
+    )
 
     if result.stdout:
         logger.debug(f"校验 stdout：\n{result.stdout}")
@@ -38,7 +45,7 @@ def is_pass(loss_path: str) -> bool:
         logger.debug(f"loss.txt 不存在，视为 PASS：{loss_path}")
         return True
     missing = []
-    with open(loss_path, encoding="utf-8") as f:
+    with open(loss_path, encoding="utf-8-sig") as f:
         for line in f:
             line = line.strip()
             if line and not line.startswith("#"):
@@ -57,7 +64,7 @@ def read_missing_lines(loss_path: str) -> list:
     if not os.path.exists(loss_path):
         return []
     lines = []
-    with open(loss_path, encoding="utf-8") as f:
+    with open(loss_path, encoding="utf-8-sig") as f:
         for line in f:
             line = line.strip()
             if line and not line.startswith("#"):
