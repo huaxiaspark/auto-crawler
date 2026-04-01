@@ -56,7 +56,9 @@ def _flatten_and_classify(data_dir: str):
             continue
         if not fname.endswith((".xlsx", ".csv")):
             continue
-        task_name = fname.split("_")[0] if "_" in fname else fname
+        # 使用 os.path.basename 处理路径，确保跨平台兼容
+        pure_fname = os.path.basename(fname)
+        task_name = pure_fname.split("_")[0] if "_" in pure_fname else pure_fname
         task_dir = os.path.join(data_dir, task_name)
         os.makedirs(task_dir, exist_ok=True)
         shutil.move(fpath, os.path.join(task_dir, fname))

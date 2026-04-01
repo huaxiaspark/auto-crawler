@@ -36,6 +36,8 @@ class _SizedTimedRotatingFileHandler(TimedRotatingFileHandler):
                 if self.stream:
                     self.stream.close()
                     self.stream = None
+                if os.path.exists(new):
+                    os.remove(new)
                 os.rename(old, new)
                 self.stream = self._open()
         except Exception:

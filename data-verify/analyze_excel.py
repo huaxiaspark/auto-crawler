@@ -60,6 +60,8 @@ class _SizedTimedRotatingFileHandler(TimedRotatingFileHandler):
             ):
                 self._size_rollover_count += 1
                 new = f"{self.baseFilename}.{time.strftime(self.suffix, time.localtime())}_{self._size_rollover_count}"
+                if os.path.exists(new):
+                    os.remove(new)
                 if self.stream:
                     self.stream.close()
                     self.stream = None
