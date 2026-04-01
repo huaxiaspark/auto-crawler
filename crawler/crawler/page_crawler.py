@@ -1240,7 +1240,7 @@ class PageCrawler:
 
         # 3. 点击查询
         self.filter_handler.click_query_button()
-        time.sleep(1)
+        time.sleep(2)
 
         # 4. 尝试导出（优先使用导出）
         if has_export:

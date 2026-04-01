@@ -1,5 +1,5 @@
 schedule:
-  cron: "25 7 * * *"          # 定时日增模式触发时间，标准 5 字段 cron 表达式（分 时 日 月 周）
+  cron: "30 8 * * *"          # 定时日增模式触发时间，标准 5 字段 cron 表达式（分 时 日 月 周）
   timezone: "Asia/Shanghai"
 
 crawler:
@@ -27,7 +27,7 @@ upload:
 notify:
   enabled: true
   type: "http"
-  url: "http://localhost:28301/api/trigger"
+  url: "http://112.126.80.142:28301/api/trigger"
   secret: "${CRAWLER_NOTIFY_SECRET}"
   retry_times: 3
   retry_interval_seconds: 30
