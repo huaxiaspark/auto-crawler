@@ -59,18 +59,35 @@ def _write_lock(lock_path: str, payload: dict):
 
 def _pid_exists(pid: int) -> bool:
     if not pid or pid <= 0:
+        logger.debug("_pid_exists: pid=%s 无效，返回 False", pid)
+        return False
+    if os.name == "nt":
+        # Windows 下 os.kill(pid, 0) 实际调用 TerminateProcess，会杀死目标进程，
+        # 改用 OpenProcess 安全探测进程是否存在
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        handle = kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, pid,
+        )
+        if handle:
+            kernel32.CloseHandle(handle)
+            logger.debug("_pid_exists: [Windows/OpenProcess] pid=%s 存在", pid)
+            return True
+        logger.debug("_pid_exists: [Windows/OpenProcess] pid=%s 不存在", pid)
         return False
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
+        logger.debug("_pid_exists: [POSIX/kill-0] pid=%s 不存在 (ProcessLookupError)", pid)
         return False
     except PermissionError:
+        logger.debug("_pid_exists: [POSIX/kill-0] pid=%s 存在但无权限 (PermissionError)", pid)
         return True
     except OSError:
+        logger.debug("_pid_exists: [POSIX/kill-0] pid=%s 存在 (OSError)", pid)
         return True
-    except SystemError:
-        # Windows: os.kill(pid, 0) 对无效 PID 会抛出 SystemError
-        return False
+    logger.debug("_pid_exists: [POSIX/kill-0] pid=%s 存在", pid)
     return True
 
 
