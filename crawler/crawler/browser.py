@@ -22,6 +22,7 @@ from playwright.sync_api import Browser, BrowserContext, Page, Playwright, sync_
 from utils.logger import get_logger
 
 logger = get_logger()
+KEEPALIVE_PAGE_MARKER = "AUTO_CRAWLER_KEEPALIVE"
 
 
 class BrowserManager:
@@ -118,6 +119,17 @@ class BrowserManager:
         logger.info("已连接到现有页面: %s", self._page.url)
         return self._page
 
+    def _is_keepalive_page(self, page: Page) -> bool:
+        """判断标签页是否为保活专用页面。"""
+        try:
+            return page.evaluate("() => window.name") == KEEPALIVE_PAGE_MARKER
+        except Exception:
+            return False
+
+    def _mark_page_as_keepalive(self, page: Page):
+        """给标签页打上保活标记，便于爬虫连接时跳过。"""
+        page.evaluate(f"() => {{ window.name = '{KEEPALIVE_PAGE_MARKER}'; }}")
+
     def _find_target_page(self) -> Optional[Page]:
         """
         在所有已打开的标签页中查找目标页面
@@ -128,14 +140,25 @@ class BrowserManager:
         contexts = self._browser.contexts
         logger.debug("浏览器有 %d 个 context", len(contexts))
 
+        keepalive_candidate = None
+
         for ctx_idx, ctx in enumerate(contexts):
             pages = ctx.pages
             logger.debug("  Context %d: %d 个页面", ctx_idx, len(pages))
             for page in pages:
                 logger.debug("    标签页 URL: %s", page.url)
                 if self.target_url_pattern in page.url:
+                    if self._is_keepalive_page(page):
+                        keepalive_candidate = keepalive_candidate or (ctx, page)
+                        logger.debug("    跳过保活专用标签页: %s", page.url)
+                        continue
                     self._context = ctx
                     return page
+
+        if keepalive_candidate is not None:
+            self._context, page = keepalive_candidate
+            logger.warning("仅找到保活专用标签页，将复用该标签页执行爬取")
+            return page
 
         # 未找到匹配页面，列出所有标签页帮助诊断
         logger.warning("未找到目标页面，当前所有标签页:")
@@ -144,6 +167,38 @@ class BrowserManager:
                 logger.warning("  - %s", page.url)
 
         return None
+
+    def get_or_create_keepalive_page(self, target_url: str) -> Page:
+        """
+        获取或创建保活专用标签页。
+
+        connect 模式下优先复用当前 context 中已存在的保活标签页；
+        若不存在，则在当前登录 context 中新建一个标签页，并写入 window.name 标记。
+        """
+        if self._browser is None:
+            raise RuntimeError("浏览器尚未启动，请先调用 start()")
+
+        for ctx in self._browser.contexts:
+            for page in ctx.pages:
+                if self._is_keepalive_page(page):
+                    self._context = ctx
+                    page.set_default_timeout(self.timeout)
+                    return page
+
+        ctx = self._context
+        if ctx is None:
+            contexts = self._browser.contexts
+            if not contexts:
+                raise RuntimeError("当前浏览器中没有可用 context，无法创建保活标签页")
+            ctx = contexts[0]
+            self._context = ctx
+
+        page = ctx.new_page()
+        page.set_default_timeout(self.timeout)
+        self._mark_page_as_keepalive(page)
+        page.goto(target_url, wait_until="domcontentloaded")
+        logger.info("已创建保活专用标签页: %s", target_url)
+        return page
 
     def _launch_new(self) -> Page:
         """启动全新的 Chromium 浏览器实例（原有逻辑）"""
