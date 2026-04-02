@@ -42,6 +42,11 @@ def _flatten_and_classify(data_dir: str):
             src = os.path.join(subdir_path, fname)
             dst = os.path.join(data_dir, fname)
             if os.path.isfile(src):
+                if os.path.exists(dst):
+                    logger.warning(
+                        "[Step 4] 文件整理：目标已存在，将被覆盖：%s（来源子目录：%s）",
+                        fname, subdir,
+                    )
                 shutil.move(src, dst)
         # 删除已清空的子目录
         try:
@@ -121,6 +126,11 @@ def run(config: dict, start: str, end: str, tasks: list = None,
     categories = _get_categories(config, tasks)
     logger.debug(f"本次 categories={categories}")
 
+    run_ctx = (
+        f"start={start}，end={end}，tasks={tasks or '全部'}，"
+        f"scheduled_run={scheduled_run}"
+    )
+
     # Step 1: 爬取
     try:
         crawler_runner.run(
@@ -131,20 +141,33 @@ def run(config: dict, start: str, end: str, tasks: list = None,
             scheduled_run=scheduled_run,
         )
     except Exception:
-        logger.error("[Step 1] 爬虫失败，终止当前流程", exc_info=True)
+        logger.error(
+            "[Step 1] 爬虫失败，终止当前流程（%s）", run_ctx, exc_info=True,
+        )
         return
 
     # Step 2 & 3: 校验 + 重爬
+    verify_passed = False
     try:
-        _run_verify_and_retry(
+        verify_passed = _run_verify_and_retry(
             start=start,
             end=end,
             config=config,
             scheduled_run=scheduled_run,
         )
     except Exception:
-        logger.error("[Step 2/3] 校验/重爬异常，终止当前流程", exc_info=True)
+        logger.error(
+            "[Step 2/3] 校验/重爬异常，终止当前流程（%s）", run_ctx, exc_info=True,
+        )
         return
+
+    if verify_passed:
+        logger.info("[Step 2/3] 数据校验最终结果：PASS（%s）", run_ctx)
+    else:
+        logger.warning(
+            "[Step 2/3] 数据校验最终结果：FAIL（仍有缺失数据），继续打包上传（%s）",
+            run_ctx,
+        )
 
     # Step 4: 打包上传
     data_dir = os.path.abspath(config["crawler"]["data_dir"])
@@ -152,7 +175,7 @@ def run(config: dict, start: str, end: str, tasks: list = None,
     upload_start = datetime.now()
 
     try:
-        logger.info("[Step 4] 开始整理文件")
+        logger.info("[Step 4] 开始整理文件（%s）", run_ctx)
         _flatten_and_classify(data_dir)
 
         md5, size_bytes = uploader.pack_and_upload(
@@ -168,7 +191,9 @@ def run(config: dict, start: str, end: str, tasks: list = None,
             uploaded_at=upload_start.isoformat(),
         )
     except Exception:
-        logger.error("[Step 4] 打包上传失败，跳过通知和清理", exc_info=True)
+        logger.error(
+            "[Step 4] 打包上传失败，跳过通知和清理（%s）", run_ctx, exc_info=True,
+        )
         return
 
     # 上传成功后清理
@@ -186,7 +211,9 @@ def run(config: dict, start: str, end: str, tasks: list = None,
             config=config,
         )
     except Exception:
-        logger.error("[Step 4] 通知服务器 B 异常", exc_info=True)
+        logger.error(
+            "[Step 4] 通知服务器 B 异常（%s）", run_ctx, exc_info=True,
+        )
 
     elapsed = (datetime.now() - t0).total_seconds()
-    logger.info(f"pipeline.run 完成，耗时 {elapsed:.1f}s")
+    logger.info(f"pipeline.run 完成，耗时 {elapsed:.1f}s（{run_ctx}）")

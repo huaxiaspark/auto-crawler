@@ -171,7 +171,11 @@ def run_crawler(config: dict, tasks: dict, start_date: str, end_date: str,
         page_crawler.navigator.wait_for_sidebar_ready()
 
         # 逐任务执行
-        for task_name, task_config in tasks.items():
+        task_names = list(tasks.keys())
+        total_tasks = len(task_names)
+        interrupted = False
+
+        for task_idx, (task_name, task_config) in enumerate(tasks.items(), 1):
             try:
                 batch_queries = None
                 task_date_list = None
@@ -240,13 +244,28 @@ def run_crawler(config: dict, tasks: dict, start_date: str, end_date: str,
                     date_list=task_date_list,
                 )
             except KeyboardInterrupt:
-                logger.warning("用户中断，停止爬取")
+                logger.warning(
+                    "用户中断（KeyboardInterrupt），停止爬取。"
+                    "当前任务：「%s」（%d/%d），日期范围：%s ~ %s",
+                    task_name, task_idx, total_tasks,
+                    task_start_date, task_end_date,
+                )
+                interrupted = True
                 break
             except Exception as e:
-                logger.error("任务「%s」执行失败: %s", task_name, e, exc_info=True)
+                logger.error(
+                    "任务「%s」（%d/%d）执行失败，日期范围 %s ~ %s: %s",
+                    task_name, task_idx, total_tasks,
+                    task_start_date, task_end_date, e,
+                    exc_info=True,
+                )
                 continue
 
-    logger.info("所有任务执行完毕")
+    if interrupted:
+        logger.warning("爬虫因用户中断提前退出，已完成 %d/%d 个任务", task_idx - 1, total_tasks)
+        sys.exit(130)
+    else:
+        logger.info("所有任务执行完毕（共 %d 个任务）", total_tasks)
 
 
 def run_validation(config: dict):

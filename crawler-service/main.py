@@ -45,7 +45,7 @@ if __name__ == "__main__":
 
         def scheduled_job():
             trigger_date = date.today().strftime("%Y-%m-%d")
-            logger.info(f"定时任务触发，触发日期={trigger_date}")
+            logger.info(f"[定时任务] 触发，触发日期={trigger_date}")
             try:
                 with runtime_guard.acquire_crawl_lock(config, mode="scheduled"):
                     pipeline.run(
@@ -55,15 +55,21 @@ if __name__ == "__main__":
                         tasks=None,
                         scheduled_run=True,
                     )
+                logger.info(f"[定时任务] 执行完毕，触发日期={trigger_date}")
             except runtime_guard.CrawlAlreadyRunningError as e:
-                logger.warning("定时任务跳过：%s", e)
+                logger.warning("[定时任务] 跳过：%s", e)
+            except Exception:
+                logger.error(
+                    "[定时任务] 执行异常，触发日期=%s", trigger_date, exc_info=True,
+                )
 
         def keepalive_job():
             logger.info("[KeepAlive] 触发会话保活任务")
             try:
                 keepalive.refresh_session(config)
+                logger.info("[KeepAlive] 会话保活任务完成")
             except Exception:
-                logger.error("[KeepAlive] 会话保活失败", exc_info=True)
+                logger.error("[KeepAlive] 会话保活任务失败", exc_info=True)
 
         scheduler = BlockingScheduler(timezone=timezone)
         scheduler.add_job(
@@ -92,8 +98,27 @@ if __name__ == "__main__":
             logger.info("会话保活已禁用")
         try:
             scheduler.start()
-        except (KeyboardInterrupt, SystemExit):
-            logger.info("crawler-service 已停止")
+        except KeyboardInterrupt:
+            logger.info(
+                "crawler-service 收到 KeyboardInterrupt 信号，正在停止调度器"
+                "（定时任务 cron=%s，保活任务 enabled=%s）",
+                cron_expr, keepalive_enabled,
+            )
+        except SystemExit as e:
+            logger.info(
+                "crawler-service 收到 SystemExit 信号（code=%s），正在停止调度器"
+                "（定时任务 cron=%s，保活任务 enabled=%s）",
+                e.code, cron_expr, keepalive_enabled,
+            )
+        finally:
+            active = runtime_guard.get_active_crawl(config)
+            if active:
+                logger.warning(
+                    "crawler-service 停止时仍有爬虫运行中：mode=%s，pid=%s",
+                    active.get("mode"), active.get("pid"),
+                )
+            else:
+                logger.info("crawler-service 已安全停止，无正在运行的爬虫任务")
     else:
         if not args.start or not args.end:
             logger.error("batch 模式必须同时指定 --start 和 --end 参数")
