@@ -1,14 +1,12 @@
 import argparse
 import sys
-from datetime import date, datetime
+from datetime import date
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
 
 from config_loader import load_config
 from logger import setup_logger
-import keepalive
 import pipeline
 import runtime_guard
 
@@ -33,9 +31,6 @@ if __name__ == "__main__":
         sched_cfg = config["schedule"]
         cron_expr = sched_cfg.get("cron", "30 8 * * *")
         timezone = sched_cfg.get("timezone", "Asia/Shanghai")
-        keepalive_cfg = config.get("keepalive", {})
-        keepalive_enabled = keepalive_cfg.get("enabled", True)
-        keepalive_interval_minutes = keepalive_cfg.get("interval_minutes", 15)
 
         logger.info(
             f"定时日增模式已启动，cron={cron_expr}，timezone={timezone}，"
@@ -63,14 +58,6 @@ if __name__ == "__main__":
                     "[定时任务] 执行异常，触发日期=%s", trigger_date, exc_info=True,
                 )
 
-        def keepalive_job():
-            logger.info("[KeepAlive] 触发会话保活任务")
-            try:
-                keepalive.refresh_session(config)
-                logger.info("[KeepAlive] 会话保活任务完成")
-            except Exception:
-                logger.error("[KeepAlive] 会话保活任务失败", exc_info=True)
-
         scheduler = BlockingScheduler(timezone=timezone)
         scheduler.add_job(
             scheduled_job,
@@ -80,35 +67,19 @@ if __name__ == "__main__":
             coalesce=True,
             replace_existing=True,
         )
-        if keepalive_enabled:
-            scheduler.add_job(
-                keepalive_job,
-                IntervalTrigger(minutes=keepalive_interval_minutes, timezone=timezone),
-                id="session_keepalive",
-                next_run_time=datetime.now(),
-                max_instances=1,
-                coalesce=True,
-                replace_existing=True,
-            )
-            logger.info(
-                "会话保活已启用：每 %s 分钟自动刷新一次目标页面，服务运行期间持续执行",
-                keepalive_interval_minutes,
-            )
-        else:
-            logger.info("会话保活已禁用")
         try:
             scheduler.start()
         except KeyboardInterrupt:
             logger.info(
                 "crawler-service 收到 KeyboardInterrupt 信号，正在停止调度器"
-                "（定时任务 cron=%s，保活任务 enabled=%s）",
-                cron_expr, keepalive_enabled,
+                "（定时任务 cron=%s）",
+                cron_expr,
             )
         except SystemExit as e:
             logger.info(
                 "crawler-service 收到 SystemExit 信号（code=%s），正在停止调度器"
-                "（定时任务 cron=%s，保活任务 enabled=%s）",
-                e.code, cron_expr, keepalive_enabled,
+                "（定时任务 cron=%s）",
+                e.code, cron_expr,
             )
         finally:
             active = runtime_guard.get_active_crawl(config)

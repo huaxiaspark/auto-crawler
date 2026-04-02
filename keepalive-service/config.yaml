@@ -1,0 +1,11 @@
+keepalive:
+  interval_minutes: 15        # 每隔多少分钟刷新一次目标页面，维持 cookie 活跃
+
+crawler:
+  config_path: "../crawler/config.yaml"   # 需要读取 target_url 和 browser 配置
+
+runtime_guard:
+  lock_dir: "../crawler-service/logs"     # 与 crawler-service 共享锁文件目录
+
+log_dir: "./logs"
+log_max_size_mb: 5

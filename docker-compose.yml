@@ -58,12 +58,33 @@ services:
       - CRAWLER_NOTIFY_SECRET=${CRAWLER_NOTIFY_SECRET}
     volumes:
       - ./crawler:/app/crawler:rw
+      - ./common:/app/common:ro
       - ./data-verify:/app/data-verify:rw
       - ./crawler-service/config.yaml:/app/crawler-service/config.yaml:ro
       - ./data/crawler:/app/crawler/data:rw
       - ./data/data-verify/loss.txt:/app/data-verify/loss.txt:rw
       - ./data/data-verify/validation_errors.txt:/app/data-verify/validation_errors.txt:rw
       - ./logs/crawler-service:/app/crawler-service/logs:rw
+    networks:
+      - crawler-net
+
+  # ── Cookie 保活服务（与采集服务部署在同一台机器）───────────────────────
+  keepalive-service:
+    container_name: ${CRAWLER_CONTAINER_PREFIX:-auto-crawler}-keepalive
+    build:
+      context: ./keepalive-service
+      dockerfile: Dockerfile
+    pull_policy: never
+    image: keepalive-service:latest
+    restart: always
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./crawler:/app/crawler:ro
+      - ./common:/app/common:ro
+      - ./keepalive-service/config.yaml:/app/keepalive-service/config.yaml:ro
+      - ./logs/crawler-service:/app/crawler-service/logs:rw
+      - ./logs/keepalive-service:/app/keepalive-service/logs:rw
     networks:
       - crawler-net
 

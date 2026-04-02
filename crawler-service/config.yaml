@@ -2,10 +2,6 @@ schedule:
   cron: "30 8 * * *"          # 定时日增模式触发时间，标准 5 字段 cron 表达式（分 时 日 月 周）
   timezone: "Asia/Shanghai"
 
-keepalive:
-  enabled: true
-  interval_minutes: 15        # 每隔多少分钟刷新一次目标页面，维持 cookie 活跃
-
 crawler:
   script_path: "../crawler/main.py"
   config_path: "../crawler/config.yaml"

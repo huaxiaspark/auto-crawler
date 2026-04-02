@@ -26,6 +26,15 @@ auto-crawler/
 │   ├── config.yaml
 │   ├── requirements.txt
 │   └── Dockerfile
+├── keepalive-service/              # Cookie 保活服务（服务器 A，独立进程）
+│   ├── main.py
+│   ├── keepalive.py
+│   ├── runtime_guard.py
+│   ├── config_loader.py
+│   ├── logger.py
+│   ├── config.yaml
+│   ├── requirements.txt
+│   └── Dockerfile
 ├── processor-service/              # 处理服务（服务器 B）
 │   ├── base/
 │   │   ├── Dockerfile
@@ -52,9 +61,13 @@ auto-crawler/
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  服务器 A：采集服务（crawler-service）                            │
+│  服务器 A                                                        │
 │                                                                  │
+│  采集服务（crawler-service）                                      │
 │  自动爬取 → 自动校验 → [校验失败则重新爬取] → 自动打包上传         │
+│                                                                  │
+│  保活服务（keepalive-service）── 独立进程                          │
+│  每 15 分钟刷新目标页面，维持 cookie 活跃                          │
 └─────────────────────────────────────────────────────────────────┘
                               │ 上传完成后 HTTP 回调通知
                               ▼
@@ -106,6 +119,9 @@ python main.py --mode scheduled
 - `tasks.<任务名>.schedule_date_offset_days` 定义任务相对基准日的偏移
 - 未单独配置的任务使用 `schedule.default_task_date_offset_days`
 
+同时，Cookie 保活由独立的 `keepalive-service` 负责（见下文”保活服务”章节），不再包含在 `crawler-service` 进程内。两者通过运行锁隔离：任一正式爬取任务执行期间，保活会自动跳过；若已有正式爬取在运行，新的正式爬取不会并发启动。
+运行锁采用“状态 + 心跳”机制：正式爬取开始后会写入 `crawler-runtime.lock`，并持续刷新心跳时间；正常结束时会回写完成状态。若进程被外部中断，导致来不及正常收尾，只要超过超时阈值未收到新心跳，后续任务会自动识别并清理陈旧锁，避免误判为“仍有任务在运行”。
+
 因此可同时满足“部分任务抓当天、部分任务抓明天、其他任务抓昨天”的需求；`data-verify` 也会读取同一套规则换算校验日期，保证校验与重爬一致。
 如需排查某次定时任务，也可以手工传入对应触发日期复现，系统会按传入触发日期而不是当前系统日期计算任务偏移。
 
@@ -129,6 +145,10 @@ python main.py --mode batch --start 2025-01-01 --end 2025-01-31 --task 日前备
 schedule:
   cron: "30 8 * * *"       # 触发时间（标准 cron 表达式）
   timezone: "Asia/Shanghai"
+
+runtime_guard:
+  heartbeat_interval_seconds: 5  # 运行锁心跳刷新间隔（秒）
+  stale_timeout_seconds: 30      # 超过该时间未收到心跳，则自动判定为陈旧锁并清理
 
 crawler:
   script_path: "../crawler/main.py"
@@ -158,6 +178,37 @@ notify:
   retry_times: 3
   retry_interval_seconds: 30
 ```
+
+---
+
+## 保活服务（keepalive-service）
+
+独立于采集服务运行的 Cookie 保活进程，默认每 15 分钟刷新一次山西电力交易平台目标页面，维持 Chrome 浏览器中的登录态与 Cookie 活跃。
+
+### 工作原理
+
+- 通过 CDP 连接到与爬虫相同的 Chrome 浏览器实例
+- 使用独立的保活专用标签页（`window.name = "AUTO_CRAWLER_KEEPALIVE"`）执行刷新，不干扰爬虫正在操作的业务页面
+- 每次刷新前检查运行锁（`crawler-runtime.lock`），若正式爬取任务正在执行则跳过本轮保活
+- 连接浏览器后会进行二次检查，进一步缩小竞态窗口
+
+### 配置文件（`keepalive-service/config.yaml`）
+
+```yaml
+keepalive:
+  interval_minutes: 15        # 每隔多少分钟刷新一次目标页面
+
+crawler:
+  config_path: "../crawler/config.yaml"   # 读取 target_url 和 browser 配置
+
+runtime_guard:
+  lock_dir: "../crawler-service/logs"     # 与 crawler-service 共享锁文件目录
+
+log_dir: "./logs"
+log_max_size_mb: 5
+```
+
+> `runtime_guard.lock_dir` 必须指向与 `crawler-service` 的 `log_dir` 相同的目录，否则保活服务无法感知爬虫运行状态。
 
 ---
 
@@ -242,6 +293,7 @@ notify:
 
 - Docker 20.10+，Docker Compose v2
 - 宿主机已安装并登录 Chrome（供爬虫 CDP 连接，仅服务器 A 需要）
+- Chrome 中需至少保留一个已登录到山西电力交易平台的标签页；保活服务（keepalive-service）启动后会自动创建/复用一个保活专用标签页持续刷新
 - MinIO 服务可访问
 
 ### 首次部署
@@ -280,6 +332,7 @@ data/post-process/output/
 data/crawler-processor-service/cache/
 data/crawler-processor-service/processed_jobs.json   # 内容为 {}
 logs/crawler-service/
+logs/keepalive-service/
 logs/crawler-processor-service/
 ```
 
@@ -306,10 +359,12 @@ docker compose up -d
 ```bash
 # 查看日志
 docker compose logs -f crawler-service
+docker compose logs -f keepalive-service
 docker compose logs -f crawler-processor-service
 
 # 仅更新业务代码后重建并重启
 docker compose up -d --build crawler-service
+docker compose up -d --build keepalive-service
 docker compose up -d --build crawler-processor-service
 
 # 依赖变更后重建基础镜像
@@ -424,20 +479,102 @@ touch ../data-verify/validation_errors.txt
 定时模式（后台运行）：
 
 ```bash
+linux:
 nohup python main.py --mode scheduled > logs/stdout.log 2>&1 & echo $! > crawler-service.pid
+
+windows PowerShell：
+$proc = Start-Process python -ArgumentList "main.py --mode scheduled" -RedirectStandardOutput "logs/stdout.log" -RedirectStandardError "logs/stdout.log" -PassThru -WindowStyle Hidden; $proc.Id | Out-File "crawler-service.pid" -Encoding ascii
+
 ```
+
+上述 `scheduled` 模式启动后，会按 `schedule.cron` 执行正式的爬取/校验/上传流水线。Cookie 保活由独立的 `keepalive-service` 负责（见下方部署步骤）。
+
+运行隔离规则如下：
+
+- `scheduled` 正式爬取执行期间，保活服务自动跳过，不刷新页面
+- 手动 `batch` 执行期间，保活服务同样自动跳过
+- 若某次 `scheduled` 还未结束时又尝试启动 `batch`，`batch` 会直接报错退出，避免两个正式爬取互相干扰
+- 若手动 `batch` 正在执行，到了下一个 `scheduled` 触发点，本次定时任务会记录跳过日志，不与 `batch` 并发
+- 若正式任务异常中断，最多等待约 `runtime_guard.stale_timeout_seconds` 秒，系统会在下一次保活或新的正式任务启动时自动清理陈旧锁
 
 手动批量模式：
 
 ```bash
-python main.py --mode batch --start 2026-03-01 --end 2026-03-02
-python main.py --mode batch --start 2026-03-01 --end 2026-03-02 --task 日前备用总量,断面约束
+python main.py --mode batch --start 2025-01-01 --end 2026-01-31 --task 非市场化机组出力,开机不满72小时机组,省内负荷及联络线情况
+python main.py --mode batch --start 2026-03-27 --end 2026-03-31 --task 水电（含抽蓄）总出力, 日前备用总量,断面约束
 ```
 
 **8. 停止服务**
 
 ```bash
 kill $(cat crawler-service.pid)
+```
+
+---
+
+### 服务器 A：保活服务（keepalive-service）
+
+保活服务与采集服务部署在同一台服务器上，共享同一个 Chrome 浏览器实例。
+
+**1. 创建并激活虚拟环境**
+
+```bash
+cd auto-crawler/keepalive-service
+python3 -m venv venv
+source venv/bin/activate
+```
+
+**2. 安装依赖**
+
+```bash
+# 安装 keepalive-service 自身依赖
+pip install -r requirements.txt
+
+# 安装爬虫模块依赖（保活服务通过 BrowserManager 连接浏览器）
+pip install -r ../crawler/requirements.txt
+
+# 安装 Playwright 浏览器驱动（若 crawler-service 已安装则可跳过）
+playwright install chromium
+```
+
+**3. 确认 `config.yaml` 配置**
+
+```yaml
+keepalive:
+  interval_minutes: 15        # 保活刷新间隔（分钟）
+
+crawler:
+  config_path: "../crawler/config.yaml"
+
+runtime_guard:
+  lock_dir: "../crawler-service/logs"   # 必须与 crawler-service 的 log_dir 指向同一目录
+```
+
+> `runtime_guard.lock_dir` 是保活服务与采集服务协调的关键——两者通过同一目录下的 `crawler-runtime.lock` 文件通信。如果 `crawler-service` 的 `log_dir` 使用了非默认路径，此处也需相应修改。
+
+**4. 创建日志目录**
+
+```bash
+mkdir -p logs
+```
+
+**5. 启动服务**
+
+```bash
+linux:
+nohup python main.py > logs/stdout.log 2>&1 & echo $! > keepalive-service.pid
+
+windows PowerShell：
+$proc = Start-Process python -ArgumentList "main.py" -RedirectStandardOutput "logs/stdout.log" -RedirectStandardError "logs/stdout.log" -PassThru -WindowStyle Hidden; $proc.Id | Out-File "keepalive-service.pid" -Encoding ascii
+
+```
+
+启动后服务会立即执行一次保活刷新，之后每隔 `interval_minutes` 分钟循环执行。日志中以 `[KeepAlive]` 前缀标识保活操作。
+
+**6. 停止服务**
+
+```bash
+kill $(cat keepalive-service.pid)
 ```
 
 ---
@@ -539,6 +676,27 @@ sudo systemctl status crawler-service
 
 处理服务（processor-service）按同样方式创建对应的 `.service` 文件，`ExecStart` 改为 `python main.py` 即可。
 
+保活服务（keepalive-service）同理，创建 `/etc/systemd/system/keepalive-service.service`：
+
+```ini
+[Unit]
+Description=Auto Crawler Keepalive Service
+After=network.target
+
+[Service]
+Type=simple
+User=<运行用户>
+WorkingDirectory=/path/to/auto-crawler/keepalive-service
+ExecStart=/path/to/auto-crawler/keepalive-service/venv/bin/python main.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:/path/to/auto-crawler/keepalive-service/logs/stdout.log
+StandardError=append:/path/to/auto-crawler/keepalive-service/logs/stderr.log
+
+[Install]
+WantedBy=multi-user.target
+```
+
 ---
 
 ### 查看日志
@@ -546,9 +704,11 @@ sudo systemctl status crawler-service
 ```bash
 # 实时跟踪滚动日志文件
 tail -f auto-crawler/crawler-service/logs/crawler-service.log
+tail -f auto-crawler/keepalive-service/logs/main.log
 
 # 若使用 systemd
 journalctl -u crawler-service -f
+journalctl -u keepalive-service -f
 ```
 
 ---
@@ -558,6 +718,7 @@ journalctl -u crawler-service -f
 两个服务的日志均输出到控制台和滚动文件（单文件最大 10MB，保留 5 个备份），持久化到宿主机：
 
 - `logs/crawler-service/` → 容器内 `/app/crawler-service/logs/`
+- `logs/keepalive-service/` → 容器内 `/app/keepalive-service/logs/`
 - `logs/crawler-processor-service/` → 容器内 `/app/crawler-processor-service/logs/`
 
 日志格式：`%(asctime)s [%(levelname)s] %(name)s: %(message)s`
@@ -584,7 +745,9 @@ environment:
 | `crawler-service` | 28300 | 8300 |
 | `crawler-processor-service` | 28301 | 8301 |
 
-`crawler-service` 需要访问宿主机 Chrome 的 CDP 端口（默认 9222），请确保宿主机防火墙允许容器访问该端口，或在 `docker-compose.yml` 中为 `crawler-service` 添加 `extra_hosts: ["host-gateway:host-gateway"]`。
+`crawler-service` 需要访问宿主机 Chrome 的 CDP 端口（默认 9222），`keepalive-service` 同样需要访问该端口。请确保宿主机防火墙允许容器访问该端口，或在 `docker-compose.yml` 中为相关服务添加 `extra_hosts: ["host-gateway:host-gateway"]`。
+
+保活服务与正式爬虫共用同一个已登录 Chrome 的 cookie 空间，但保活刷新发生在专用标签页中；若发现系统中只剩下保活专用页，正式爬虫会复用该页并在日志中给出提示。
 
 ---
 

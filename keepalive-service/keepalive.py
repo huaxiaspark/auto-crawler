@@ -25,7 +25,7 @@ class _KeepAliveFilter(logging.Filter):
     """当保活任务活跃时，为所有日志记录添加 [KeepAlive] 前缀。
 
     通过 thread-local 变量控制，仅在 refresh_session 执行线程中生效，
-    避免影响爬虫主线程的日志输出。
+    避免影响其他线程的日志输出。
     """
 
     def filter(self, record):
