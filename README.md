@@ -565,7 +565,7 @@ linux:
 nohup python main.py > logs/stdout.log 2>&1 & echo $! > keepalive-service.pid
 
 windows PowerShell：
-$proc = Start-Process python -ArgumentList "main.py" -RedirectStandardOutput "logs/stdout.log" -RedirectStandardError "logs/stdout.log" -PassThru -WindowStyle Hidden; $proc.Id | Out-File "keepalive-service.pid" -Encoding ascii
+$proc = Start-Process python -ArgumentList "main.py" -RedirectStandardOutput "logs/stdout.log" -RedirectStandardError "logs/stderr.log" -PassThru -WindowStyle Hidden; $proc.Id | Out-File "keepalive-service.pid" -Encoding ascii
 
 ```
 
