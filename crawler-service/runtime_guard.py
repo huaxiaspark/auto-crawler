@@ -24,7 +24,18 @@ def _read_lock(lock_path: str):
         with open(lock_path, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
-        return {"pid": None, "mode": "unknown", "started_at": None}
+        return {
+            "pid": None,
+            "mode": "unknown",
+            "running": False,
+            "started_at": None,
+            "finished_at": None,
+        }
+
+
+def _write_lock(lock_path: str, payload: dict):
+    with open(lock_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False)
 
 
 def _pid_exists(pid: int) -> bool:
@@ -45,6 +56,13 @@ def _remove_stale_lock(lock_path: str):
     lock_info = _read_lock(lock_path)
     if not lock_info:
         return
+    if not lock_info.get("running", False):
+        try:
+            os.remove(lock_path)
+            logger.info("检测到已完成运行锁，已自动清理: %s", lock_path)
+        except FileNotFoundError:
+            pass
+        return
     pid = lock_info.get("pid")
     if _pid_exists(pid):
         return
@@ -60,6 +78,8 @@ def get_active_crawl(config: dict):
     _remove_stale_lock(lock_path)
     lock_info = _read_lock(lock_path)
     if not lock_info:
+        return None
+    if not lock_info.get("running", False):
         return None
     pid = lock_info.get("pid")
     if not _pid_exists(pid):
@@ -81,7 +101,9 @@ def acquire_crawl_lock(config: dict, mode: str):
     payload = {
         "pid": os.getpid(),
         "mode": mode,
+        "running": True,
         "started_at": int(time.time()),
+        "finished_at": None,
     }
 
     try:
@@ -101,7 +123,9 @@ def acquire_crawl_lock(config: dict, mode: str):
         try:
             current = _read_lock(lock_path)
             if current and current.get("pid") == payload["pid"]:
-                os.remove(lock_path)
-                logger.info("已释放运行锁，mode=%s，pid=%s", mode, payload["pid"])
+                current["running"] = False
+                current["finished_at"] = int(time.time())
+                _write_lock(lock_path, current)
+                logger.info("已更新运行锁为完成状态，mode=%s，pid=%s", mode, payload["pid"])
         except FileNotFoundError:
             pass
