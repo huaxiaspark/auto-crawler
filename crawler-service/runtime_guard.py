@@ -2,11 +2,14 @@ import json
 import logging
 import os
 import time
+import threading
 from contextlib import contextmanager
 
 
 logger = logging.getLogger(__name__)
 LOCK_FILENAME = "crawler-runtime.lock"
+DEFAULT_HEARTBEAT_INTERVAL_SECONDS = 5
+DEFAULT_STALE_TIMEOUT_SECONDS = 30
 
 
 class CrawlAlreadyRunningError(RuntimeError):
@@ -15,6 +18,19 @@ class CrawlAlreadyRunningError(RuntimeError):
 
 def _lock_path(config: dict) -> str:
     return os.path.join(os.path.abspath(config["log_dir"]), LOCK_FILENAME)
+
+
+def _heartbeat_interval_seconds(config: dict) -> int:
+    runtime_cfg = config.get("runtime_guard", {})
+    return max(1, int(runtime_cfg.get("heartbeat_interval_seconds", DEFAULT_HEARTBEAT_INTERVAL_SECONDS)))
+
+
+def _stale_timeout_seconds(config: dict) -> int:
+    runtime_cfg = config.get("runtime_guard", {})
+    return max(
+        _heartbeat_interval_seconds(config) + 1,
+        int(runtime_cfg.get("stale_timeout_seconds", DEFAULT_STALE_TIMEOUT_SECONDS)),
+    )
 
 
 def _read_lock(lock_path: str):
@@ -30,6 +46,7 @@ def _read_lock(lock_path: str):
             "running": False,
             "started_at": None,
             "finished_at": None,
+            "heartbeat_at": None,
         }
 
 
@@ -52,7 +69,14 @@ def _pid_exists(pid: int) -> bool:
     return True
 
 
-def _remove_stale_lock(lock_path: str):
+def _is_heartbeat_stale(lock_info: dict, stale_timeout_seconds: int) -> bool:
+    heartbeat_at = lock_info.get("heartbeat_at") or lock_info.get("started_at")
+    if not heartbeat_at:
+        return True
+    return (time.time() - heartbeat_at) > stale_timeout_seconds
+
+
+def _remove_stale_lock(lock_path: str, stale_timeout_seconds: int):
     lock_info = _read_lock(lock_path)
     if not lock_info:
         return
@@ -60,6 +84,13 @@ def _remove_stale_lock(lock_path: str):
         try:
             os.remove(lock_path)
             logger.info("检测到已完成运行锁，已自动清理: %s", lock_path)
+        except FileNotFoundError:
+            pass
+        return
+    if _is_heartbeat_stale(lock_info, stale_timeout_seconds):
+        try:
+            os.remove(lock_path)
+            logger.warning("检测到超时运行锁，已自动清理: %s", lock_path)
         except FileNotFoundError:
             pass
         return
@@ -75,15 +106,19 @@ def _remove_stale_lock(lock_path: str):
 
 def get_active_crawl(config: dict):
     lock_path = _lock_path(config)
-    _remove_stale_lock(lock_path)
+    stale_timeout_seconds = _stale_timeout_seconds(config)
+    _remove_stale_lock(lock_path, stale_timeout_seconds)
     lock_info = _read_lock(lock_path)
     if not lock_info:
         return None
     if not lock_info.get("running", False):
         return None
+    if _is_heartbeat_stale(lock_info, stale_timeout_seconds):
+        _remove_stale_lock(lock_path, stale_timeout_seconds)
+        return None
     pid = lock_info.get("pid")
     if not _pid_exists(pid):
-        _remove_stale_lock(lock_path)
+        _remove_stale_lock(lock_path, stale_timeout_seconds)
         return None
     return lock_info
 
@@ -96,7 +131,9 @@ def is_crawl_running(config: dict) -> bool:
 def acquire_crawl_lock(config: dict, mode: str):
     os.makedirs(config["log_dir"], exist_ok=True)
     lock_path = _lock_path(config)
-    _remove_stale_lock(lock_path)
+    stale_timeout_seconds = _stale_timeout_seconds(config)
+    heartbeat_interval_seconds = _heartbeat_interval_seconds(config)
+    _remove_stale_lock(lock_path, stale_timeout_seconds)
 
     payload = {
         "pid": os.getpid(),
@@ -104,7 +141,9 @@ def acquire_crawl_lock(config: dict, mode: str):
         "running": True,
         "started_at": int(time.time()),
         "finished_at": None,
+        "heartbeat_at": int(time.time()),
     }
+    stop_event = threading.Event()
 
     try:
         fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -118,13 +157,33 @@ def acquire_crawl_lock(config: dict, mode: str):
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False)
         logger.info("已获取运行锁，mode=%s，pid=%s", mode, payload["pid"])
+
+        def _heartbeat_loop():
+            while not stop_event.wait(heartbeat_interval_seconds):
+                try:
+                    current = _read_lock(lock_path)
+                    if not current or current.get("pid") != payload["pid"] or not current.get("running", False):
+                        return
+                    current["heartbeat_at"] = int(time.time())
+                    _write_lock(lock_path, current)
+                except Exception:
+                    logger.warning("更新运行锁心跳失败，mode=%s，pid=%s", mode, payload["pid"], exc_info=True)
+
+        heartbeat_thread = threading.Thread(
+            target=_heartbeat_loop,
+            name=f"runtime-guard-heartbeat-{mode}",
+            daemon=True,
+        )
+        heartbeat_thread.start()
         yield
     finally:
+        stop_event.set()
         try:
             current = _read_lock(lock_path)
             if current and current.get("pid") == payload["pid"]:
                 current["running"] = False
                 current["finished_at"] = int(time.time())
+                current["heartbeat_at"] = int(time.time())
                 _write_lock(lock_path, current)
                 logger.info("已更新运行锁为完成状态，mode=%s，pid=%s", mode, payload["pid"])
         except FileNotFoundError:
