@@ -68,6 +68,9 @@ def _pid_exists(pid: int) -> bool:
         return True
     except OSError:
         return True
+    except SystemError:
+        # Windows: os.kill(pid, 0) 对无效 PID 会抛出 SystemError
+        return False
     return True
 
 
