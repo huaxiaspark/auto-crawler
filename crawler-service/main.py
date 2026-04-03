@@ -66,6 +66,7 @@ if __name__ == "__main__":
             max_instances=1,
             coalesce=True,
             replace_existing=True,
+            misfire_grace_time=60,
         )
         try:
             scheduler.start()
