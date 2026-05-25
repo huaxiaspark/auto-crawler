@@ -16,6 +16,7 @@ from typing import Optional, Union
 from playwright.sync_api import Page, Frame, TimeoutError as PlaywrightTimeout
 
 from utils.logger import get_logger
+from utils.timing import sleep as ui_sleep
 
 logger = get_logger()
 
@@ -254,7 +255,7 @@ class PaginationHandler:
                     break
 
                 previous_height = current_height
-                time.sleep(1)
+                ui_sleep("long")
                 attempts += 1
 
             except Exception as e:

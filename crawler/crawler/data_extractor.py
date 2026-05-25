@@ -13,6 +13,7 @@ from playwright.sync_api import Page, Frame, TimeoutError as PlaywrightTimeout
 from bs4 import BeautifulSoup
 
 from utils.logger import get_logger
+from utils.timing import sleep as ui_sleep
 
 logger = get_logger()
 
@@ -44,7 +45,7 @@ class DataExtractor:
         try:
             # 等待表格出现（在 iframe 内）
             self.ctx.wait_for_selector("table", timeout=10000)
-            time.sleep(1)
+            ui_sleep("long")
 
             # 获取内容 HTML（从 iframe 上下文获取）
             html = self.ctx.content()

@@ -35,6 +35,7 @@ from typing import Optional
 from playwright.sync_api import Page, Locator, TimeoutError as PlaywrightTimeout
 
 from utils.logger import get_logger
+from utils.timing import sleep as ui_sleep
 
 logger = get_logger()
 
@@ -154,9 +155,9 @@ class Navigator:
         # 第一次尝试：点击 .el-tree-node__content
         node_content = self._find_tree_node_content(text, timeout=timeout)
         node_content.scroll_into_view_if_needed()
-        time.sleep(0.3)
+        ui_sleep("short")
         node_content.click()
-        time.sleep(1.5)  # 等待展开动画
+        ui_sleep("long")  # 等待展开动画
 
         if self._is_tree_node_expanded(text):
             logger.info("已展开「%s」", text)
@@ -168,7 +169,7 @@ class Navigator:
             node_content = self._find_tree_node_content(text, timeout=5000)
             expand_icon = node_content.locator(".el-tree-node__expand-icon").first
             expand_icon.click()
-            time.sleep(1.5)
+            ui_sleep("long")
         except PlaywrightTimeout:
             pass
 
@@ -193,7 +194,7 @@ class Navigator:
         logger.info("正在点击菜单项「%s」...", text)
         node_content = self._find_tree_node_content(text, timeout=timeout)
         node_content.scroll_into_view_if_needed()
-        time.sleep(0.3)
+        ui_sleep("short")
         node_content.click()
 
     # ── 等待与就绪检查 ────────────────────────────────────────
@@ -312,7 +313,7 @@ class Navigator:
                 logger.error("重置导航状态失败: %s", e)
                 raise PlaywrightTimeout(f"未找到子菜单「{subcategory}」且重置导航失败")
             raise
-        time.sleep(2)
+        ui_sleep("xlong")
         try:
             self.page.wait_for_load_state("networkidle", timeout=15000)
         except PlaywrightTimeout:
@@ -352,7 +353,7 @@ class Navigator:
             #   - 左侧面板（手风琴菜单）
             logger.info("点击侧边栏「%s」打开页面...", category)
             self._click_tree_leaf(category, timeout=15000)
-            time.sleep(3)
+            ui_sleep("xlong")
             try:
                 self.page.wait_for_load_state("networkidle", timeout=15000)
             except PlaywrightTimeout:
@@ -467,9 +468,9 @@ class Navigator:
         try:
             tab = self._find_clickable_text(top_nav_name)
             tab.scroll_into_view_if_needed()
-            time.sleep(0.3)
+            ui_sleep("short")
             tab.click()
-            time.sleep(2)
+            ui_sleep("xlong")
             logger.info("已点击顶部导航「%s」", top_nav_name)
         except Exception as e:
             logger.error("点击顶部导航「%s」失败: %s", top_nav_name, e)
@@ -487,16 +488,16 @@ class Navigator:
                     self._current_category = None
                     self.navigate_to_info_disclosure()
                     self._click_tree_leaf(category, timeout=15000)
-                    time.sleep(3)
+                    ui_sleep("xlong")
                     try:
                         self.page.wait_for_load_state("networkidle", timeout=15000)
                     except PlaywrightTimeout:
                         pass
                     tab = self._find_clickable_text(top_nav_name)
                     tab.scroll_into_view_if_needed()
-                    time.sleep(0.3)
+                    ui_sleep("short")
                     tab.click()
-                    time.sleep(2)
+                    ui_sleep("xlong")
                     logger.info("重试成功：已点击顶部导航「%s」", top_nav_name)
                 except Exception as retry_e:
                     logger.error("重试点击顶部导航「%s」仍失败: %s", top_nav_name, retry_e)
@@ -514,7 +515,7 @@ class Navigator:
             self.page.wait_for_load_state("networkidle", timeout=10000)
         except PlaywrightTimeout:
             pass
-        time.sleep(1)
+        ui_sleep("long")
 
         # ── 第2步：在左侧面板中展开中间分类 ──
         for cat in left_panel_path:
@@ -522,9 +523,9 @@ class Navigator:
             try:
                 cat_el = self._find_clickable_text(cat)
                 cat_el.scroll_into_view_if_needed()
-                time.sleep(0.3)
+                ui_sleep("short")
                 cat_el.click()
-                time.sleep(1.5)
+                ui_sleep("long")
                 logger.info("已展开左侧面板「%s」", cat)
             except Exception as e:
                 logger.warning("展开左侧面板「%s」失败: %s", cat, e)
@@ -535,9 +536,9 @@ class Navigator:
         try:
             target = self._find_clickable_text(page_name)
             target.scroll_into_view_if_needed()
-            time.sleep(0.3)
+            ui_sleep("short")
             target.click()
-            time.sleep(2)
+            ui_sleep("xlong")
             try:
                 self.page.wait_for_load_state("networkidle", timeout=15000)
             except PlaywrightTimeout:
@@ -563,7 +564,7 @@ class Navigator:
         try:
             tab = self.page.locator(f"text={tab_name}").first
             tab.click()
-            time.sleep(1.5)
+            ui_sleep("long")
             self.page.wait_for_load_state("networkidle", timeout=10000)
         except PlaywrightTimeout:
             logger.warning("未找到 Tab「%s」", tab_name)
@@ -572,7 +573,7 @@ class Navigator:
         """等待表格加载完成"""
         try:
             self.page.wait_for_selector("table", timeout=timeout)
-            time.sleep(1)
+            ui_sleep("long")
             logger.debug("表格已加载")
         except PlaywrightTimeout:
             logger.warning("等待表格超时 (%dms)", timeout)

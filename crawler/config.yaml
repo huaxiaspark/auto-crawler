@@ -37,6 +37,16 @@ request:
   retry_interval: 5         # 重试间隔（秒）
   export_timeout: 30        # 导出下载超时（秒）
 
+  # 短 sleep 分档（用途见 utils/timing.py）：
+  # 调高这些值可以让每次点击/输入/翻面之间的节奏更接近真人操作，降低被发现的风险。
+  ui_micro_delay: 0.1       # 极短：fill/press 后让 UI 同步（原 0.05 ~ 0.1）
+  ui_short_delay: 0.5       # 短：click/select 后等响应（原 0.2 ~ 0.3）
+  ui_medium_delay: 1.0      # 中：下拉打开/选项点击（原 0.5 ~ 0.8）
+  ui_long_delay: 1.5        # 长：面板展开/简单动画/普通查询返回（原 1 ~ 1.5）
+  ui_xlong_delay: 3.0       # 超长：导航切换/页面重载（原 2 ~ 3）
+  sleep_jitter: 0.3         # 抖动比例：每次实际 sleep = base * (1 ± jitter)，0 表示关闭
+  sleep_scale: 1.0          # 全局缩放因子：临时整体放慢时调大此值（如 2.0 = 整体翻倍）
+
 # 调度频率（通过命令行 --schedule 参数启用定时模式）
 schedule:
   time: "08:30"              # 每天触发时刻（HH:MM），留空则立即执行并每隔 interval_hours 小时重复

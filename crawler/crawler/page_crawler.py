@@ -25,6 +25,7 @@ from crawler.data_extractor import DataExtractor
 from storage.csv_storage import CsvStorage
 from utils.parser import parse_clearing_summary_batch
 from utils.logger import get_logger
+from utils.timing import sleep as ui_sleep
 
 logger = get_logger()
 
@@ -226,7 +227,7 @@ class PageCrawler:
                 if control_count == 0 and inner_iframe_count > 0:
                     logger.info("外层 iframe 中发现内层 iframe 但控件未加载，等待加载...")
                     for retry in range(5):
-                        time.sleep(2)
+                        ui_sleep("xlong")
                         inner = self._drill_into_nested_iframe(frame)
                         if inner:
                             self.filter_handler.ctx = inner
@@ -284,7 +285,7 @@ class PageCrawler:
         logger.warning("检测到 iframe 已 detached，正在重新检测...")
 
         # 等待一小段时间让页面稳定
-        time.sleep(1)
+        ui_sleep("long")
 
         # 重试多次，因为新的 iframe 可能还在加载中
         for attempt in range(5):
@@ -311,7 +312,7 @@ class PageCrawler:
                 logger.info("已重新检测到 iframe 并切换上下文 (第%d次尝试)", attempt + 1)
                 return
             logger.debug("第%d次重新检测 iframe 未找到，等待后重试...", attempt + 1)
-            time.sleep(2)
+            ui_sleep("xlong")
 
         # 最终回退到主页面
         logger.warning("多次重试仍未检测到 iframe，回退到主页面上下文")
@@ -419,7 +420,7 @@ class PageCrawler:
             self._current_iframe_id = None
             self._dropdown_cleared_for_none = False  # 页面恢复后需重新清空下拉框
             self._switch_to_content_frame()
-            time.sleep(3)
+            ui_sleep("xlong")
             self._ensure_content_frame()
 
             # 更新任务 iframe ID（重新导航后可能略有不同）
@@ -450,7 +451,7 @@ class PageCrawler:
             )
         except Exception:
             pass
-        time.sleep(1)
+        ui_sleep("long")
         logger.debug("下拉列表「%s」刷新等待完成", dropdown_label)
 
     def _get_channels_meta_path(self) -> str:
@@ -609,7 +610,7 @@ class PageCrawler:
             except Exception as e:
                 logger.error("导航到「%s」失败（第%d次）: %s", task_name, nav_attempt, e)
                 if nav_attempt < 3:
-                    time.sleep(3)
+                    ui_sleep("xlong")
 
         if not nav_success:
             logger.error("导航到「%s」多次失败，跳过此任务", task_name)
@@ -624,7 +625,7 @@ class PageCrawler:
         self._switch_to_content_frame()
 
         # 等待内容区完全加载（iframe 内容可能需要较长时间）
-        time.sleep(3)
+        ui_sleep("xlong")
 
         # ★ 二次确认：iframe 可能在加载过程中被替换，需要重新检测
         self._ensure_content_frame()
@@ -759,7 +760,7 @@ class PageCrawler:
                 else:
                     self.filter_handler.set_date(date_str, quick_mode=use_quick_mode)
                 if not use_quick_mode:
-                    time.sleep(0.5)
+                    ui_sleep("medium")
             except Exception as e:
                 logger.error("[%d/%d] 设置日期失败 [%s]: %s",
                              date_idx + 1, total_dates, date_str, e)
@@ -775,7 +776,7 @@ class PageCrawler:
                             self.filter_handler.set_date(
                                 date_str, quick_mode=use_quick_mode)
                         if not use_quick_mode:
-                            time.sleep(0.5)
+                            ui_sleep("medium")
                     else:
                         # 页面正常但设置日期仍失败，跳过此日期
                         time.sleep(self.date_interval)
@@ -810,7 +811,7 @@ class PageCrawler:
                         if recovered:
                             self._ensure_content_frame()
                             self.filter_handler.set_date(date_str, quick_mode=False)
-                            time.sleep(0.5)
+                            ui_sleep("medium")
                             self._wait_for_dropdown_refresh(dropdown_label)
                             dropdown_options = self.filter_handler.get_dropdown_options(
                                 dropdown_label)
@@ -988,7 +989,7 @@ class PageCrawler:
             try:
                 self._ensure_content_frame()
                 self.filter_handler.set_date(date_str, quick_mode=False)
-                time.sleep(0.5)
+                ui_sleep("medium")
             except Exception as e:
                 logger.error("设置日期失败 [%s]: %s", date_str, e)
                 try:
@@ -997,7 +998,7 @@ class PageCrawler:
                     )
                     if recovered:
                         self.filter_handler.set_date(date_str, quick_mode=False)
-                        time.sleep(0.5)
+                        ui_sleep("medium")
                     else:
                         time.sleep(self.date_interval)
                         continue
@@ -1134,7 +1135,7 @@ class PageCrawler:
                         self.filter_handler.set_dual_date(date_str)
                     else:
                         self.filter_handler.set_date(date_str, quick_mode=True)
-                    time.sleep(0.5)
+                    ui_sleep("medium")
                 self._do_crawl_export_all(
                     task_name, task_config, date_str, category, export_type,
                 )
@@ -1181,7 +1182,7 @@ class PageCrawler:
         logger.info("直接导出未成功，尝试先点击查询再导出...")
         self._ensure_content_frame()
         self.filter_handler.click_query_button()
-        time.sleep(1)
+        ui_sleep("long")
 
         filepath = do_export()
         if filepath:
@@ -1216,7 +1217,7 @@ class PageCrawler:
                 self.filter_handler.set_dual_date(date_str)
             else:
                 self.filter_handler.set_date(date_str)
-            time.sleep(0.5)
+            ui_sleep("medium")
 
         # 2. 设置下拉选项（先选下拉，再点查询）
         if dropdown_label and dropdown_value:
@@ -1226,7 +1227,7 @@ class PageCrawler:
                     # 首次清空：使用完整方法（含页面类型检测和等待）
                     self.filter_handler.clear_dropdown_input(dropdown_label)
                     self._dropdown_cleared_for_none = True
-                    time.sleep(0.3)
+                    ui_sleep("short")
                 else:
                     # ★ 后续清空：使用快速方法（直接通过 FineReport JS API 调用，~0.1s）
                     # 注意：此方法仅适用于 FineReport 页面；若快速清空失败，
@@ -1236,11 +1237,11 @@ class PageCrawler:
                     self.filter_handler.quick_clear_fr_dropdown(dropdown_label)
             else:
                 self.filter_handler.select_dropdown_option(dropdown_label, dropdown_value)
-                time.sleep(0.5)
+                ui_sleep("medium")
 
         # 3. 点击查询
         self.filter_handler.click_query_button()
-        time.sleep(2)
+        ui_sleep("xlong")
 
         # 4. 尝试导出（优先使用导出）
         if has_export:

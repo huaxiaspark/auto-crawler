@@ -51,6 +51,7 @@ from crawler.page_crawler import PageCrawler
 from storage.csv_storage import CsvStorage
 from utils.logger import setup_logger, get_logger
 from utils.parser import parse_loss_file
+from utils.timing import configure as configure_sleep
 from utils.validator import DataValidator, validate_csv_file
 
 
@@ -424,6 +425,9 @@ def main():
     # 初始化日志
     setup_logger(config)
     logger = get_logger()
+
+    # 初始化短 sleep 分档（让 utils.timing.sleep 读取本次配置）
+    configure_sleep(config)
 
     # 列出任务
     if args.list_tasks:

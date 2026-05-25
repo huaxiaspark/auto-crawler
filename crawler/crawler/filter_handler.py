@@ -13,6 +13,7 @@ from typing import List, Optional, Union
 from playwright.sync_api import Page, Frame, TimeoutError as PlaywrightTimeout
 
 from utils.logger import get_logger
+from utils.timing import sleep as ui_sleep
 
 logger = get_logger()
 
@@ -188,7 +189,7 @@ class FilterHandler:
                 trigger_btn.click()
             else:
                 combo.locator("input").first.click()
-            time.sleep(1)
+            ui_sleep("long")
 
             # 等待下拉列表出现并收集选项
             # FineReport combo 下拉列表的常见选择器
@@ -218,7 +219,7 @@ class FilterHandler:
                 self.page.keyboard.press("Escape")
             except Exception:
                 pass
-            time.sleep(0.3)
+            ui_sleep("short")
 
         except Exception as e:
             logger.debug("FineReport DOM 获取下拉选项失败: %s", e)
@@ -252,7 +253,7 @@ class FilterHandler:
             if success:
                 logger.info("通过 FineReport JS API 设置下拉值: %s = %s",
                             dropdown_label, option_text)
-                time.sleep(0.5)
+                ui_sleep("medium")
                 return
         except Exception as e:
             logger.debug("FineReport JS API 设置下拉值失败: %s", e)
@@ -265,12 +266,12 @@ class FilterHandler:
             ).first
             if combo_input and combo_input.is_visible():
                 combo_input.click()
-                time.sleep(0.3)
+                ui_sleep("short")
                 combo_input.fill(option_text)
-                time.sleep(0.5)
+                ui_sleep("medium")
                 # 按 Enter 确认选择
                 combo_input.press("Enter")
-                time.sleep(0.3)
+                ui_sleep("short")
                 logger.info("通过 DOM 输入设置下拉值: %s = %s",
                             dropdown_label, option_text)
                 return
@@ -286,7 +287,7 @@ class FilterHandler:
                 trigger_btn.click()
             else:
                 combo.locator("input").first.click()
-            time.sleep(1)
+            ui_sleep("long")
 
             # 在下拉列表中查找并点击目标选项
             fr_item_selectors = [
@@ -303,7 +304,7 @@ class FilterHandler:
                         text = item.text_content().strip()
                         if text == option_text:
                             item.click()
-                            time.sleep(0.5)
+                            ui_sleep("medium")
                             logger.info("通过点击 FineReport 下拉列表选项: %s = %s",
                                         dropdown_label, option_text)
                             return
@@ -360,11 +361,11 @@ class FilterHandler:
             ).first
             if pagesize_input and pagesize_input.is_visible():
                 pagesize_input.click()
-                time.sleep(0.3)
+                ui_sleep("short")
                 pagesize_input.fill(size_str)
-                time.sleep(0.3)
+                ui_sleep("short")
                 pagesize_input.press("Enter")
-                time.sleep(0.5)
+                ui_sleep("medium")
                 logger.info("通过 DOM 设置 FineReport 每页条数: %d", size)
                 return
         except Exception as e:
@@ -533,7 +534,7 @@ class FilterHandler:
             time.sleep(click_sleep)
 
             date_input.press("Control+a")
-            time.sleep(0.05)  # 减少全选后的等待时间
+            ui_sleep("micro")  # 减少全选后的等待时间
             date_input.fill(date_str)
             time.sleep(fill_sleep)
 
@@ -565,21 +566,21 @@ class FilterHandler:
                     date_input.press("Tab")
                 except Exception:
                     pass
-                time.sleep(0.2)  # 减少等待时间
+                ui_sleep("short")  # 减少等待时间
 
                 # 按 Escape 关闭日期面板
                 try:
                     self.page.keyboard.press("Escape")
                 except Exception:
                     pass
-                time.sleep(0.3)  # 减少等待时间
+                ui_sleep("short")  # 减少等待时间
 
                 # 点击页面空白处确保日期面板关闭
                 try:
                     self.ctx.locator("body").click(position={"x": 0, "y": 0})
                 except Exception:
                     pass
-                time.sleep(0.2)  # 减少等待时间
+                ui_sleep("short")  # 减少等待时间
                 logger.debug("关闭日期面板耗时: %.2f秒", time_module.time() - close_start)
 
             total_time = time_module.time() - start_time
@@ -696,11 +697,11 @@ class FilterHandler:
                 logger.debug("填写%s: %s", label, date_str)
 
                 date_input.click()
-                time.sleep(0.3)
+                ui_sleep("short")
                 date_input.press("Control+a")
-                time.sleep(0.05)
+                ui_sleep("micro")
                 date_input.fill(date_str)
-                time.sleep(0.2)
+                ui_sleep("short")
 
                 # 验证输入值，fill 不生效则用 JS 赋值
                 try:
@@ -724,19 +725,19 @@ class FilterHandler:
                     date_input.press("Tab")
                 except Exception:
                     pass
-                time.sleep(0.3)
+                ui_sleep("short")
 
             # 关闭可能打开的日期面板
             try:
                 self.page.keyboard.press("Escape")
             except Exception:
                 pass
-            time.sleep(0.3)
+            ui_sleep("short")
             try:
                 self.ctx.locator("body").click(position={"x": 0, "y": 0})
             except Exception:
                 pass
-            time.sleep(0.2)
+            ui_sleep("short")
 
             total_time = time_module.time() - start_time
             logger.info("双日期已设置为: %s (总耗时: %.2f秒)", date_str, total_time)
@@ -792,7 +793,7 @@ class FilterHandler:
         # 先关闭可能已打开的面板
         try:
             self.page.keyboard.press("Escape")
-            time.sleep(0.5)
+            ui_sleep("medium")
         except Exception:
             pass
 
@@ -800,11 +801,11 @@ class FilterHandler:
         for _ in range(5):
             if self._find_active_dropdown_panel() is None:
                 break
-            time.sleep(0.3)
+            ui_sleep("short")
 
         # 点击打开下拉面板
         dropdown.click()
-        time.sleep(0.8)
+        ui_sleep("medium")
 
         # 等待目标下拉面板出现（通过检测可见面板）
         panel = None
@@ -827,11 +828,11 @@ class FilterHandler:
                 try:
                     # 先关闭可能打开的其他面板
                     self.page.keyboard.press("Escape")
-                    time.sleep(0.3)
+                    ui_sleep("short")
                 except Exception:
                     pass
                 dropdown.click()
-                time.sleep(1.5)
+                ui_sleep("long")
 
         if panel is None or not panel.is_visible():
             logger.warning("下拉面板仍未出现，尝试使用 JavaScript 触发")
@@ -848,7 +849,7 @@ class FilterHandler:
                         }
                     }
                 }""", dropdown.element_handle())
-                time.sleep(1.5)
+                ui_sleep("long")
                 panel = self._find_active_dropdown_panel()
             except Exception as e:
                 logger.debug("JS 触发下拉面板失败: %s", e)
@@ -864,7 +865,7 @@ class FilterHandler:
             self.page.keyboard.press("Escape")
         except Exception:
             pass
-        time.sleep(0.3)
+        ui_sleep("short")
 
     def _collect_visible_dropdown_items(self) -> List[str]:
         """
@@ -1004,7 +1005,7 @@ class FilterHandler:
         """
         # 打开下拉面板
         self._open_dropdown_panel(dropdown_label)
-        time.sleep(0.3)
+        ui_sleep("short")
 
         # 关键：找到当前打开的面板，仅在其中查找选项
         panel = self._find_active_dropdown_panel()
@@ -1026,7 +1027,7 @@ class FilterHandler:
                     if text == option_text:
                         # 滚动到可见区域
                         item.scroll_into_view_if_needed()
-                        time.sleep(0.2)
+                        ui_sleep("short")
                         item.click()
                         option_found = True
                         logger.debug("通过精确匹配点击选项: %s", option_text)
@@ -1048,7 +1049,7 @@ class FilterHandler:
                         if text == option_text:
                             parent = item.locator("..")
                             parent.scroll_into_view_if_needed()
-                            time.sleep(0.2)
+                            ui_sleep("short")
                             parent.click()
                             option_found = True
                             logger.debug("通过span子元素点击选项: %s", option_text)
@@ -1066,7 +1067,7 @@ class FilterHandler:
                 ).first
                 if target.is_visible():
                     target.scroll_into_view_if_needed()
-                    time.sleep(0.2)
+                    ui_sleep("short")
                     target.click()
                     option_found = True
                     logger.debug("通过has-text点击选项: %s", option_text)
@@ -1078,7 +1079,7 @@ class FilterHandler:
             raise RuntimeError(f"未在下拉选项中找到: {option_text}")
 
         # 等待下拉面板自动关闭（el-select 选中后自动收起）
-        time.sleep(0.5)
+        ui_sleep("medium")
 
         logger.info("已选择: %s = %s", dropdown_label, option_text)
 
@@ -1180,7 +1181,7 @@ class FilterHandler:
             }""", dropdown_label)
             if success:
                 logger.info("已通过 FineReport JS API 清空下拉框: %s", dropdown_label)
-                time.sleep(0.3)
+                ui_sleep("short")
                 return
         except Exception as e:
             logger.debug("FineReport JS API 清空下拉值失败: %s", e)
@@ -1193,11 +1194,11 @@ class FilterHandler:
             ).first
             if combo_input and combo_input.is_visible():
                 combo_input.click()
-                time.sleep(0.2)
+                ui_sleep("short")
                 combo_input.fill("")
-                time.sleep(0.2)
+                ui_sleep("short")
                 combo_input.press("Enter")
-                time.sleep(0.3)
+                ui_sleep("short")
                 logger.info("已通过 DOM 清空 FineReport 下拉框: %s", dropdown_label)
                 return
         except Exception as e:
@@ -1234,7 +1235,7 @@ class FilterHandler:
                     selectEl.__vue__.$emit('change', '');
                 }
             }""", dropdown.element_handle())
-            time.sleep(0.3)
+            ui_sleep("short")
             logger.info("已通过 JS 清空 Element UI 下拉框: %s", dropdown_label)
             return
         except Exception as e:
@@ -1246,13 +1247,13 @@ class FilterHandler:
                 "xpath=ancestor::div[contains(@class,'el-select')][1]"
             )
             select_container.hover()
-            time.sleep(0.3)
+            ui_sleep("short")
             clear_btn = select_container.locator(
                 ".el-input__clear, .el-icon-circle-close"
             ).first
             if clear_btn and clear_btn.is_visible():
                 clear_btn.click()
-                time.sleep(0.3)
+                ui_sleep("short")
                 logger.info("已通过清空按钮清空 Element UI 下拉框: %s", dropdown_label)
                 return
         except Exception as e:
@@ -1291,11 +1292,11 @@ class FilterHandler:
                         # 找到后点击旁边的下拉框
                         dropdown = element.locator(".. >> select, .. >> .el-input__inner").first
                         dropdown.click()
-                        time.sleep(0.5)
+                        ui_sleep("medium")
 
                         # 选择目标条数
                         self.ctx.locator(f"text={size}").first.click()
-                        time.sleep(1)
+                        ui_sleep("long")
                         logger.info("已设置每页 %d 条", size)
                         return
                 except Exception:
@@ -1308,7 +1309,7 @@ class FilterHandler:
                 for opt in opts:
                     if str(size) in opt.text_content():
                         sel.select_option(str(size))
-                        time.sleep(1)
+                        ui_sleep("long")
                         logger.info("已设置每页 %d 条", size)
                         return
 
@@ -1348,7 +1349,7 @@ class FilterHandler:
                     btn = self.ctx.locator(sel).first
                     if btn.is_visible():
                         btn.click()
-                        time.sleep(2)
+                        ui_sleep("xlong")
                         try:
                             self.ctx.wait_for_load_state("networkidle", timeout=15000)
                         except Exception:
