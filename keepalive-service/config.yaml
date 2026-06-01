@@ -1,8 +1,11 @@
 keepalive:
   interval_minutes: 15        # 每隔多少分钟刷新一次目标页面，维持 cookie 活跃
 
+  # 注意：request.* timing 参数（sleep_jitter/sleep_scale/ui_*_delay）
+  # 统一从 ../crawler/config.yaml 读取，避免重复维护
+
 crawler:
-  config_path: "../crawler/config.yaml"   # 需要读取 target_url 和 browser 配置
+  config_path: "../crawler/config.yaml"   # 需要读取 target_url、browser 和 timing 配置
 
 runtime_guard:
   lock_dir: "../crawler-service/logs"     # 与 crawler-service 共享锁文件目录

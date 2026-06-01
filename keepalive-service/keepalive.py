@@ -14,6 +14,7 @@ if CRAWLER_ROOT not in sys.path:
     sys.path.insert(0, CRAWLER_ROOT)
 
 from crawler.browser import BrowserManager
+from utils.timing import configure as configure_sleep, sleep as ui_sleep
 
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,8 @@ def refresh_session(config: dict):
             return
 
         crawler_config = _load_crawler_config(config)
+        # 加载爬虫配置中的 timing 参数（jitter/scale/分档），与爬虫保持一致
+        configure_sleep(crawler_config)
         target_url = crawler_config.get("target_url", "https://pmos.sx.sgcc.com.cn/#/dashboard")
 
         with BrowserManager(crawler_config) as browser:
@@ -93,11 +96,17 @@ def refresh_session(config: dict):
             page = browser.get_or_create_keepalive_page(target_url)
             current_url = page.url or ""
 
+            # 模拟人类操作节奏：导航前随机等待，避免固定间隔被风控识别
+            ui_sleep("long")
+
             if current_url.startswith(target_url):
                 logger.info("[KeepAlive] 刷新保活标签页，url=%s", current_url)
                 page.reload(wait_until="domcontentloaded")
             else:
                 logger.info("[KeepAlive] 保活标签页不在目标页，重新导航到 %s", target_url)
                 page.goto(target_url, wait_until="domcontentloaded")
+
+            # 刷新完成后随机等待，模拟人类浏览行为后再退出
+            ui_sleep("xlong")
 
             logger.info("[KeepAlive] 保活刷新完成，当前页面=%s", page.url)
