@@ -35,7 +35,7 @@ from typing import Optional
 from playwright.sync_api import Page, Locator, TimeoutError as PlaywrightTimeout
 
 from utils.logger import get_logger
-from utils.timing import sleep as ui_sleep
+from utils.timing import sleep as ui_sleep, sleep_seconds
 
 logger = get_logger()
 
@@ -366,7 +366,7 @@ class Navigator:
             self.navigate_to_category(category)
             self.navigate_to_subcategory(page_name)
 
-        time.sleep(self.query_interval)
+        sleep_seconds(self.query_interval)
 
     def _find_clickable_text(self, text: str, timeout: int = 10000):
         """

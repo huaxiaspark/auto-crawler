@@ -13,7 +13,7 @@ from playwright.sync_api import Page, Frame, TimeoutError as PlaywrightTimeout
 from bs4 import BeautifulSoup
 
 from utils.logger import get_logger
-from utils.timing import sleep as ui_sleep
+from utils.timing import sleep as ui_sleep, sleep_seconds
 
 logger = get_logger()
 

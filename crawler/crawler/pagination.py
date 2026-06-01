@@ -16,7 +16,7 @@ from typing import Optional, Union
 from playwright.sync_api import Page, Frame, TimeoutError as PlaywrightTimeout
 
 from utils.logger import get_logger
-from utils.timing import sleep as ui_sleep
+from utils.timing import sleep as ui_sleep, sleep_seconds
 
 logger = get_logger()
 
@@ -156,7 +156,7 @@ class PaginationHandler:
                     btn = self.ctx.locator(sel).first
                     if btn.is_visible() and btn.is_enabled():
                         btn.click()
-                        time.sleep(self.page_interval)
+                        sleep_seconds(self.page_interval)
                         try:
                             self.ctx.wait_for_load_state(
                                 "networkidle", timeout=10000
@@ -204,7 +204,7 @@ class PaginationHandler:
                         inp.click()
                         inp.fill(str(page_num))
                         inp.press("Enter")
-                        time.sleep(self.page_interval)
+                        sleep_seconds(self.page_interval)
                         try:
                             self.ctx.wait_for_load_state(
                                 "networkidle", timeout=10000
@@ -382,7 +382,7 @@ class PaginationHandler:
                 }
             }""")
             if success:
-                time.sleep(self.page_interval)
+                sleep_seconds(self.page_interval)
                 logger.debug("通过 FineReport JS API 翻到下一页")
                 return True
         except Exception:
@@ -401,7 +401,7 @@ class PaginationHandler:
                 btn = self.ctx.locator(sel).first
                 if btn.is_visible():
                     btn.click()
-                    time.sleep(self.page_interval)
+                    sleep_seconds(self.page_interval)
                     logger.debug("通过点击 FineReport 下一页按钮翻页")
                     return True
             except Exception:
@@ -427,7 +427,7 @@ class PaginationHandler:
                 }
             }""", page_num)
             if success:
-                time.sleep(self.page_interval)
+                sleep_seconds(self.page_interval)
                 logger.debug("通过 FineReport JS API 跳转到第 %d 页", page_num)
                 return True
         except Exception:
@@ -448,7 +448,7 @@ class PaginationHandler:
                         inp.click()
                         inp.fill(str(page_num))
                         inp.press("Enter")
-                        time.sleep(self.page_interval)
+                        sleep_seconds(self.page_interval)
                         logger.debug("通过 FineReport 页码输入框跳转到第 %d 页", page_num)
                         return True
                 except Exception:

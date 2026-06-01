@@ -13,7 +13,7 @@ from typing import List, Optional, Union
 from playwright.sync_api import Page, Frame, TimeoutError as PlaywrightTimeout
 
 from utils.logger import get_logger
-from utils.timing import sleep as ui_sleep
+from utils.timing import sleep as ui_sleep, sleep_seconds
 
 logger = get_logger()
 
@@ -531,12 +531,12 @@ class FilterHandler:
             fill_sleep = 0.1 if quick_mode else 0.3
             
             date_input.click()
-            time.sleep(click_sleep)
+            sleep_seconds(click_sleep)
 
             date_input.press("Control+a")
             ui_sleep("micro")  # 减少全选后的等待时间
             date_input.fill(date_str)
-            time.sleep(fill_sleep)
+            sleep_seconds(fill_sleep)
 
             # 验证输入值，如果 fill 不生效则用 JS 直接赋值
             try:

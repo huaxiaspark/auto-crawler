@@ -64,7 +64,28 @@ def sleep(kind: str = "short") -> None:
     base = _config.get(kind)
     if base is None:
         base = _config.get("short", _DEFAULTS["short"])
+    _do_sleep(base)
 
+
+def sleep_seconds(seconds: float) -> None:
+    """按指定秒数休眠，自动应用全局缩放与随机抖动。
+
+    用于 page_interval / query_interval / date_interval / retry_interval 这类
+    "外部请求节奏"配置——它们是风控真正能观测到的间隔，应避免固定节奏。
+
+    Args:
+        seconds: 基准秒数（通常来自 config.request.* 配置项）
+    """
+    try:
+        base = float(seconds)
+    except (TypeError, ValueError):
+        return
+    _do_sleep(base)
+
+
+def _do_sleep(base: float) -> None:
+    if base <= 0:
+        return
     scaled = base * _config.get("scale", 1.0)
     jitter = _config.get("jitter", 0.0)
     if jitter > 0 and scaled > 0:

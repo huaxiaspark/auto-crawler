@@ -15,6 +15,7 @@ from typing import List, Optional, Set, Union
 from playwright.sync_api import Page, Frame, TimeoutError as PlaywrightTimeout
 
 from utils.logger import get_logger
+from utils.timing import sleep_seconds
 
 logger = get_logger()
 
@@ -145,7 +146,7 @@ class ExportHandler:
                     if attempt < max_retries:
                         logger.warning("未找到「%s」按钮，%d秒后重试 (%d/%d)", 
                                      export_type, retry_interval, attempt, max_retries)
-                        time.sleep(retry_interval)
+                        sleep_seconds(retry_interval)
                         continue
                     else:
                         logger.warning("未找到「%s」按钮，已重试%d次", export_type, max_retries)
@@ -173,7 +174,7 @@ class ExportHandler:
                 if attempt < max_retries:
                     logger.warning("导出超时，%d秒后重试 (%d/%d) [%s]", 
                                  retry_interval, attempt, max_retries, task_name)
-                    time.sleep(retry_interval)
+                    sleep_seconds(retry_interval)
                     continue
                 else:
                     logger.warning("导出超时，可能按钮不可用或无数据，已重试%d次 [%s]", 
@@ -183,7 +184,7 @@ class ExportHandler:
                 if attempt < max_retries:
                     logger.warning("导出失败，%d秒后重试 (%d/%d) [%s]: %s", 
                                  retry_interval, attempt, max_retries, task_name, e)
-                    time.sleep(retry_interval)
+                    sleep_seconds(retry_interval)
                     continue
                 else:
                     logger.error("导出失败，已重试%d次 [%s]: %s", max_retries, task_name, e)

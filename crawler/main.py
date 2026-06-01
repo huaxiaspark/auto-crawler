@@ -51,7 +51,7 @@ from crawler.page_crawler import PageCrawler
 from storage.csv_storage import CsvStorage
 from utils.logger import setup_logger, get_logger
 from utils.parser import parse_loss_file
-from utils.timing import configure as configure_sleep
+from utils.timing import configure as configure_sleep, sleep as ui_sleep, sleep_seconds
 from utils.validator import DataValidator, validate_csv_file
 
 
@@ -163,7 +163,7 @@ def run_crawler(config: dict, tasks: dict, start_date: str, end_date: str,
         else:
             # launch 模式：启动新浏览器，需导航到目标网站
             browser.navigate(target_url)
-            time.sleep(3)
+            ui_sleep("xlong")
 
         # 创建页面爬取器
         page_crawler = PageCrawler(browser.page, config)
@@ -375,7 +375,7 @@ def run_schedule(config: dict, tasks: dict, start_date: str, end_date: str):
     try:
         while True:
             sched_module.run_pending()
-            time.sleep(60)
+            sleep_seconds(60)
     except KeyboardInterrupt:
         logger.info("调度已停止")
 

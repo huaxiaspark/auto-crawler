@@ -25,7 +25,7 @@ from crawler.data_extractor import DataExtractor
 from storage.csv_storage import CsvStorage
 from utils.parser import parse_clearing_summary_batch
 from utils.logger import get_logger
-from utils.timing import sleep as ui_sleep
+from utils.timing import sleep as ui_sleep, sleep_seconds
 
 logger = get_logger()
 
@@ -779,11 +779,11 @@ class PageCrawler:
                             ui_sleep("medium")
                     else:
                         # 页面正常但设置日期仍失败，跳过此日期
-                        time.sleep(self.date_interval)
+                        sleep_seconds(self.date_interval)
                         continue
                 except Exception as recover_err:
                     logger.error("恢复导航后重新设置日期仍失败: %s", recover_err)
-                    time.sleep(self.date_interval)
+                    sleep_seconds(self.date_interval)
                     continue
 
             # ★ 日期设置成功后，根据 export_all 配置决定后续操作
@@ -821,7 +821,7 @@ class PageCrawler:
                 if not dropdown_options:
                     logger.warning("[%d/%d] 日期 %s 未获取到「%s」的下拉选项，跳过",
                                    date_idx + 1, total_dates, date_str, dropdown_label)
-                    time.sleep(self.date_interval)
+                    sleep_seconds(self.date_interval)
                     continue
 
                 # 过滤掉「不选」
@@ -853,7 +853,7 @@ class PageCrawler:
                 if not pending_options:
                     logger.info("[%d/%d] 跳过已完成日期: %s（下拉选项均已存在）",
                                 date_idx + 1, total_dates, date_str)
-                    time.sleep(self.date_interval)
+                    sleep_seconds(self.date_interval)
                     continue
 
                 # 对每个下拉选项迭代
@@ -957,7 +957,7 @@ class PageCrawler:
                     date_already_set=True,
                 )
 
-            time.sleep(self.date_interval)
+            sleep_seconds(self.date_interval)
 
         logger.info("任务「%s」完成", task_name)
 
@@ -1000,11 +1000,11 @@ class PageCrawler:
                         self.filter_handler.set_date(date_str, quick_mode=False)
                         ui_sleep("medium")
                     else:
-                        time.sleep(self.date_interval)
+                        sleep_seconds(self.date_interval)
                         continue
                 except Exception as recover_err:
                     logger.error("恢复导航后设置日期仍失败: %s", recover_err)
-                    time.sleep(self.date_interval)
+                    sleep_seconds(self.date_interval)
                     continue
             success = self._crawl_single(
                 task_name=task_name,
@@ -1021,7 +1021,7 @@ class PageCrawler:
             )
             if not success:
                 logger.warning("跳过失败组合: %s / %s", date_str, option)
-            time.sleep(self.date_interval)
+            sleep_seconds(self.date_interval)
 
     def _crawl_single(self, task_name: str, task_config: dict,
                        date_str: str, category: str,
@@ -1056,7 +1056,7 @@ class PageCrawler:
                         logger.error("恢复导航失败: %s", nav_err)
                         # 恢复导航失败，页面状态不确定，跳过本次尝试
                         if attempt < self.retry_times:
-                            time.sleep(self.retry_interval)
+                            sleep_seconds(self.retry_interval)
                             continue
                         else:
                             logger.error("已达最大重试次数，跳过此记录")
@@ -1080,7 +1080,7 @@ class PageCrawler:
                              task_name, date_str, dropdown_value, attempt, e)
                 if attempt < self.retry_times:
                     logger.info("等待 %d 秒后重试...", self.retry_interval)
-                    time.sleep(self.retry_interval)
+                    sleep_seconds(self.retry_interval)
                 else:
                     logger.error("已达最大重试次数，跳过此记录")
         return False
@@ -1121,7 +1121,7 @@ class PageCrawler:
                         logger.error("恢复导航失败: %s", nav_err)
                         # 恢复导航失败，页面状态不确定，跳过本次尝试
                         if attempt < self.retry_times:
-                            time.sleep(self.retry_interval)
+                            sleep_seconds(self.retry_interval)
                             continue
                         else:
                             logger.error("已达最大重试次数，跳过 [%s][%s]",
@@ -1145,7 +1145,7 @@ class PageCrawler:
                              task_name, date_str, attempt, e)
                 if attempt < self.retry_times:
                     logger.info("等待 %d 秒后重试...", self.retry_interval)
-                    time.sleep(self.retry_interval)
+                    sleep_seconds(self.retry_interval)
                 else:
                     logger.error("已达最大重试次数，跳过 [%s][%s]", task_name, date_str)
 
