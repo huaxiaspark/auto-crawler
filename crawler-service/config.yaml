@@ -25,12 +25,21 @@ upload:
   secure: false
 
 notify:
-  enabled: true
+  enabled: true                 # 全局总开关，false 时跳过全部通知目标
   type: "http"
-  url: "http://112.126.80.142:28301/api/trigger"
-  secret: "${CRAWLER_NOTIFY_SECRET}"
-  retry_times: 3
-  retry_interval_seconds: 30
+  retry_times: 3                # 全局默认重试次数，可被单个目标覆盖
+  retry_interval_seconds: 30    # 全局默认重试间隔（秒），可被单个目标覆盖
+  targets:                      # 通知目标列表，逐个通知，各目标相互独立、互不影响
+    - name: "算法后处理服务"          # 目标标识，用于日志区分
+      enabled: true             # 单个目标开关，false 时仅跳过该目标
+      url: "http://112.126.80.142:28301/api/trigger"
+      secret: "${CRAWLER_NOTIFY_SECRET}"
+      # retry_times: 3               # 可选，覆盖上方全局默认
+      # retry_interval_seconds: 30   # 可选，覆盖上方全局默认
+    - name: "电力现货市场数据分析服务"
+      enabled: true
+      url: "http://112.126.80.142:28060/api/ingest/notify"
+      secret: "a8b35c344c5da276a8a5ae2b17fdf4c7"
 
 log_dir: "./logs"
 log_max_size_mb: 5             # 单日志文件最大大小（MB），超出后立即滚动
