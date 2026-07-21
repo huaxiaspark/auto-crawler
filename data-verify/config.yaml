@@ -795,6 +795,31 @@ validators:
       channel_consistency:
         enabled: false
 
+  # ----------------------------------------------------------
+  # 二次调频机组收益信息 - 完整性 + 日期一致性校验
+  # 注：对应 crawler 任务 schedule_enabled=false（暂不纳入定时）。
+  #     定时模式（schedule_alignment 启用）下会自动跳过本校验器，
+  #     避免误报缺失而触发重爬；手动 --task 回补时本校验器生效。
+  # ----------------------------------------------------------
+  - name: "二次调频机组收益信息"
+    enabled: true
+
+    file_pattern:
+      prefix: "二次调频机组收益信息_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
 # ============================================================
 # 新增校验对象模板（复制此模板并填写）
 # ============================================================

@@ -84,13 +84,18 @@ def get_date_range(config: dict, args) -> tuple:
     return start_date, end_date
 
 
-def get_enabled_tasks(config: dict, task_filter: str = None) -> dict:
+def get_enabled_tasks(config: dict, task_filter: str = None,
+                      scheduled_only: bool = False) -> dict:
     """
     获取要执行的任务列表
 
     Args:
         config: 配置字典
         task_filter: 命令行指定的任务名称（可选）
+        scheduled_only: 为 True 时表示当前是定时/调度触发的运行，
+            会额外排除 schedule_enabled 为 False 的任务（默认视为 True）。
+            仅在未显式指定 task_filter 时生效——显式 --task 手动运行
+            不受 schedule_enabled 影响，便于对未纳入定时的任务做手动回补。
 
     Returns:
         任务配置字典
@@ -108,8 +113,13 @@ def get_enabled_tasks(config: dict, task_filter: str = None) -> dict:
                 logging.warning("警告：未找到任务「%s」，可用任务: %s", name, ', '.join(all_tasks.keys()))
         return filtered
 
-    # 返回所有启用的任务
-    return {name: cfg for name, cfg in all_tasks.items() if cfg.get("enabled", True)}
+    # 返回所有启用的任务；定时模式下额外排除未纳入定时的任务（schedule_enabled=false）
+    return {
+        name: cfg
+        for name, cfg in all_tasks.items()
+        if cfg.get("enabled", True)
+        and (not scheduled_only or cfg.get("schedule_enabled", True))
+    }
 
 
 def run_crawler(config: dict, tasks: dict, start_date: str, end_date: str,
@@ -447,7 +457,11 @@ def main():
         return
 
     # 获取任务和日期范围
-    tasks = get_enabled_tasks(config, args.task)
+    # 定时/调度运行（--schedule 或 --scheduled-run）时排除 schedule_enabled=false 的任务
+    tasks = get_enabled_tasks(
+        config, args.task,
+        scheduled_only=(args.schedule or args.scheduled_run),
+    )
     if not tasks:
         logger.error("没有要执行的任务，请检查配置或 --task 参数")
         sys.exit(1)

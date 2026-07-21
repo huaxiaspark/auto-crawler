@@ -6,15 +6,23 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def run(config: dict, start: str, end: str, scheduled_run: bool = False):
-    """调用 data-verify/analyze_excel.py 执行校验。"""
+def run(config: dict, start: str, end: str, scheduled_run: bool = False,
+        tasks: list = None):
+    """调用 data-verify/analyze_excel.py 执行校验。
+
+    tasks 非空时（单任务/指定任务回补）传递 --only-tasks，
+    仅校验这些任务，避免对未爬取的其他任务误报缺失而触发连带重爬。
+    """
     script = os.path.abspath(config["verify"]["script_path"])
     config_path = os.path.abspath(config["verify"]["config_path"])
     cmd = [sys.executable, script, "--config", config_path, "--start", start, "--end", end]
     cmd.append("--enable-schedule-alignment" if scheduled_run else "--disable-schedule-alignment")
+    if tasks:
+        cmd += ["--only-tasks", ",".join(tasks)]
 
     logger.info(
-        f"[Step 2] 启动校验，start={start}，end={end}，scheduled_run={scheduled_run}"
+        f"[Step 2] 启动校验，start={start}，end={end}，scheduled_run={scheduled_run}，"
+        f"tasks={tasks or '全部'}"
     )
     logger.debug(f"校验命令：{' '.join(cmd)}")
 
