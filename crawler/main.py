@@ -109,11 +109,7 @@ def get_enabled_tasks(config: dict, task_filter: str = None) -> dict:
         return filtered
 
     # 返回所有启用的任务
-    return {
-        name: cfg
-        for name, cfg in all_tasks.items()
-        if cfg.get("enabled", True)
-    }
+    return {name: cfg for name, cfg in all_tasks.items() if cfg.get("enabled", True)}
 
 
 def run_crawler(config: dict, tasks: dict, start_date: str, end_date: str,

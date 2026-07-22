@@ -370,17 +370,6 @@ tasks:
     export_type: "原样导出"
     dual_date: true  # 该页面有两个日期选择器，爬取时两个均设为同一日期
 
-  二次调频机组收益信息:
-    enabled: true
-    category: "综合查询"
-    subcategory: "市场运营"
-    has_export: true
-    export_type: "原样导出"    # 视现场绿色导出按钮实际文案调整
-    export_all: true          # 仅自家机组+每天一个文件：一次导出，文件名不带机组后缀
-    has_dropdown: false
-    has_pagination: false
-    dual_date: false          # 单日期页面（区别于「二次调频出清结果」的双日期）
-
   水电（含抽蓄）总出力:
     enabled: false
     category: "综合查询"
