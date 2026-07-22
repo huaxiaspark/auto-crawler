@@ -194,7 +194,7 @@ class ExportHandler:
 
     def _find_export_button(self, export_type: str):
         """
-        查找导出按钮（先在当前内容 ctx 内查找，找不到再跨所有 iframe 兜底）
+        查找导出按钮（在 iframe 内查找）
 
         适配多种页面类型：
         - Element UI 页面：标准 <button> 或 <a> 元素
@@ -203,89 +203,51 @@ class ExportHandler:
         注意：部分页面按钮文字中包含空格（如"导 出"而非"导出"），
         本方法会同时匹配有空格和无空格两种变体。
 
-        兜底策略（按顺序）：
-        1. 在当前内容 ctx（数据所在 iframe）内按选择器精确查找；
-        2. ctx 内按钮/链接文本回退匹配（含"导出"即可）；
-        3. 若 ctx 内仍未命中，则遍历主页面与所有 iframe 重复 1、2，
-           以应对 ctx 指向了错误的 frame，或导出控件位于其他 iframe 的情况。
-
         Args:
             export_type: 按钮文本（如 "原样导出"、"导出"、"导 出"）
 
         Returns:
             按钮元素或 None
         """
+        # 生成无空格和有空格的变体，确保两种都能匹配
         export_type_no_space = export_type.replace(" ", "")
-        # 变体去重：配置文案 + 无空格文案 + 通用兜底文案
-        variants = list(dict.fromkeys([
-            export_type, export_type_no_space, "原样导出", "导出", "导 出",
-        ]))
+        variants = list(dict.fromkeys([export_type, export_type_no_space]))
 
-        # 先在当前 ctx 查找（最常见、最快命中）
-        btn = self._find_export_button_in(self.ctx, variants, export_type_no_space)
-        if btn is not None:
-            return btn
-
-        # 兜底：遍历主页面与所有 iframe（ctx 可能指向了错误的 frame）
-        try:
-            frames = list(self.page.frames)
-        except Exception:
-            frames = []
-        for ctx in frames:
-            if ctx is self.ctx:
-                continue
-            btn = self._find_export_button_in(ctx, variants, export_type_no_space)
-            if btn is not None:
-                logger.info("导出按钮在其他 frame 命中（跨 iframe 兜底）")
-                return btn
-
-        return None
-
-    def _find_export_button_in(self, ctx, variants, export_type_no_space):
-        """在单个上下文（Page 或 Frame）内查找导出按钮。找不到返回 None。"""
         # 按优先级尝试多种选择器
         selectors = [
-            # FineReport 导出按钮（class 直命中，无需文本）
+            # FineReport 导出按钮
             'button.x-emb-excel',
             'button.fr-btn-text.x-emb-excel',
-            'a.x-emb-excel',
         ]
         for variant in variants:
             selectors.extend([
                 f'button.x-emb-excel:has-text("{variant}")',
                 f'button:has-text("{variant}")',
                 f'a:has-text("{variant}")',
-                f'[role="button"]:has-text("{variant}")',
                 f'span:has-text("{variant}")',
                 f'text={variant}',
             ])
 
         for sel in selectors:
             try:
-                btn = ctx.locator(sel).first
+                btn = self.ctx.locator(sel).first
                 if btn.is_visible():
                     logger.debug("找到导出按钮（选择器: %s）", sel)
                     return btn
             except Exception:
                 continue
 
-        # 回退：遍历 button / a，去空格后比较，兼容"导 出"等变体
-        for tag in ("button", "a", "[role='button']"):
-            try:
-                els = ctx.locator(tag).all()
-            except Exception:
-                continue
-            for el in els:
-                try:
-                    if not el.is_visible():
-                        continue
-                    text_no_space = (el.text_content() or "").strip().replace(" ", "")
-                    if (export_type_no_space in text_no_space
-                            or "导出" in text_no_space):
-                        logger.debug("找到导出按钮（文本回退: <%s> %s）", tag, text_no_space)
-                        return el
-                except Exception:
-                    continue
+        # 回退：查找包含"导出"文字的按钮（去除空格后比较，兼容"导 出"等变体）
+        try:
+            btns = self.ctx.locator("button").all()
+            for btn in btns:
+                text = btn.text_content().strip()
+                text_no_space = text.replace(" ", "")
+                if (export_type_no_space in text_no_space
+                        or "导出" in text_no_space):
+                    return btn
+        except Exception:
+            pass
 
         return None
 

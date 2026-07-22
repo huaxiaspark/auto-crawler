@@ -40,6 +40,10 @@ notify:
       enabled: true
       url: "http://112.126.80.142:28060/api/ingest/notify"
       secret: "a8b35c344c5da276a8a5ae2b17fdf4c7"
+    - name: "mock-receiver-notify"
+      enabled: true
+      url: "http://112.126.80.142:28401/data/notify"
+      secret: "secret"
 
 log_dir: "./logs"
 log_max_size_mb: 5             # 单日志文件最大大小（MB），超出后立即滚动

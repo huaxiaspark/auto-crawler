@@ -975,9 +975,6 @@ def main(config_path: str = None):
                         help='强制启用任务日期对齐，将输入日期视为调度触发日期范围')
     parser.add_argument('--disable-schedule-alignment', action='store_true',
                         help='强制关闭任务日期对齐，将输入日期直接视为目标数据日期范围')
-    parser.add_argument('--only-tasks', type=str, default=None,
-                        help='仅校验指定任务（逗号分隔的校验器 name）。用于单任务回补场景，'
-                             '避免对未爬取的其他任务误报缺失而触发连带重爬。')
     args = parser.parse_args()
 
     if args.config:
@@ -1041,28 +1038,8 @@ def main(config_path: str = None):
     dr = g['date_range']
     target_dates = generate_date_range(dr['start'], dr['end'])
     print(f"校验日期范围: {dr['start']} 至 {dr['end']}（共 {len(target_dates)} 天）")
-    align_enabled = bool(g.get('schedule_alignment', {}).get('enabled'))
-    if align_enabled:
+    if g.get('schedule_alignment', {}).get('enabled'):
         print("已启用定时任务日期对齐：校验日期将按 crawler 配置中的任务偏移规则换算")
-
-    # --only-tasks：仅校验指定任务（按校验器 name 过滤），用于单任务回补
-    only_tasks = None
-    if args.only_tasks:
-        only_tasks = {t.strip() for t in args.only_tasks.split(',') if t.strip()}
-        print(f"仅校验指定任务：{sorted(only_tasks)}")
-
-    # 定时模式下跳过 crawler 侧 schedule_enabled=false 的任务（这些任务不参与定时爬取，
-    # 若仍校验会误报缺失并触发重爬，从而架空 schedule_enabled 开关）
-    schedule_skip = set()
-    if align_enabled:
-        _policy = _load_crawler_task_policy(cfg)
-        _tasks = _policy.get('tasks', {}) if _policy else {}
-        schedule_skip = {
-            n for n, tc in _tasks.items()
-            if isinstance(tc, dict) and tc.get('schedule_enabled', True) is False
-        }
-        if schedule_skip:
-            print(f"定时模式将跳过未纳入定时的校验对象：{sorted(schedule_skip)}")
 
     summaries = []
     all_missing = []
@@ -1070,12 +1047,6 @@ def main(config_path: str = None):
     for v_cfg in cfg.get('validators', []):
         if not v_cfg.get('enabled', True):
             print(f"\n[跳过] {v_cfg['name']}（已禁用）")
-            continue
-        if only_tasks is not None and v_cfg['name'] not in only_tasks:
-            print(f"\n[跳过] {v_cfg['name']}（不在本次校验任务范围内）")
-            continue
-        if v_cfg['name'] in schedule_skip:
-            print(f"\n[跳过] {v_cfg['name']}（该任务未纳入定时 schedule_enabled=false）")
             continue
         summary = run_validator(v_cfg, cfg, target_dates)
         summaries.append(summary)

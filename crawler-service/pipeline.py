@@ -12,12 +12,8 @@ import notifier
 logger = logging.getLogger(__name__)
 
 
-def _get_categories(config: dict, tasks: list, scheduled_run: bool = False) -> list:
-    """获取本次爬取的任务名列表作为 categories。
-
-    定时触发（scheduled_run=True）且未显式指定 tasks 时，与爬虫侧保持一致：
-    排除未纳入定时的任务（schedule_enabled=false）。
-    """
+def _get_categories(config: dict, tasks: list) -> list:
+    """获取本次爬取的任务名列表作为 categories。"""
     if tasks:
         return tasks
     import yaml
@@ -28,7 +24,6 @@ def _get_categories(config: dict, tasks: list, scheduled_run: bool = False) -> l
         name
         for name, cfg in crawler_cfg.get("tasks", {}).items()
         if cfg.get("enabled")
-        and (not scheduled_run or cfg.get("schedule_enabled", True))
     ]
 
 
@@ -77,21 +72,16 @@ def _flatten_and_classify(data_dir: str):
 
 
 def _run_verify_and_retry(start: str, end: str, config: dict,
-                          scheduled_run: bool = False, tasks: list = None) -> bool:
-    """执行校验，失败则批量重爬，最多重试 max_retry_rounds 轮。返回是否最终通过。
-
-    tasks 非空时仅校验/重爬指定任务，避免单任务回补时对其他任务误报缺失。
-    """
+                          scheduled_run: bool = False) -> bool:
+    """执行校验，失败则批量重爬，最多重试 max_retry_rounds 轮。返回是否最终通过。"""
     max_rounds = config["verify"]["max_retry_rounds"]
     interval = config["verify"]["retry_interval_seconds"]
     loss_path = os.path.abspath(config["verify"]["loss_file"])
 
     logger.info(
         f"[Step 2] 开始数据校验，日期范围={start}~{end}，scheduled_run={scheduled_run}"
-        f"，tasks={tasks or '全部'}"
     )
-    verify_runner.run(config=config, start=start, end=end,
-                      scheduled_run=scheduled_run, tasks=tasks)
+    verify_runner.run(config=config, start=start, end=end, scheduled_run=scheduled_run)
 
     if verify_runner.is_pass(loss_path):
         logger.info("[Step 2] 初始校验通过，进入打包上传步骤")
@@ -105,8 +95,7 @@ def _run_verify_and_retry(start: str, end: str, config: dict,
         logger.warning(f"[Step 3] 第 {round_num}/{max_rounds} 轮重爬开始，loss_file={loss_path}")
         crawler_runner.run_with_loss_file(config=config, loss_file_abs=loss_path)
         logger.info(f"[Step 3] 第 {round_num} 轮重爬完成，开始校验")
-        verify_runner.run(config=config, start=start, end=end,
-                          scheduled_run=scheduled_run, tasks=tasks)
+        verify_runner.run(config=config, start=start, end=end, scheduled_run=scheduled_run)
 
         if verify_runner.is_pass(loss_path):
             logger.info(f"[Step 3] 第 {round_num} 轮重爬后校验通过，进入打包上传步骤")
@@ -134,7 +123,7 @@ def run(config: dict, start: str, end: str, tasks: list = None,
         f"scheduled_run={scheduled_run}"
     )
 
-    categories = _get_categories(config, tasks, scheduled_run=scheduled_run)
+    categories = _get_categories(config, tasks)
     logger.debug(f"本次 categories={categories}")
 
     run_ctx = (
@@ -165,7 +154,6 @@ def run(config: dict, start: str, end: str, tasks: list = None,
             end=end,
             config=config,
             scheduled_run=scheduled_run,
-            tasks=tasks,
         )
     except Exception:
         logger.error(

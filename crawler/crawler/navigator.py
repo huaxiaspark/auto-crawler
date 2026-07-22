@@ -531,103 +531,25 @@ class Navigator:
                 logger.warning("展开左侧面板「%s」失败: %s", cat, e)
                 self._save_debug_screenshot(f"comp_left_{cat}_failed")
 
-        # ── 第3步：点击最终目标页面（带兜底重试）──
-        # 目标叶子可能藏在左侧面板某个未展开的折叠分组（如「其他信息」）里，
-        # 直接查找会因不可见而失败。故失败时先兜底展开左侧折叠分组再重试。
+        # ── 第3步：点击最终目标页面 ──
         logger.info("点击目标「%s」...", page_name)
-        max_attempts = 3
-        last_err: Optional[Exception] = None
-        for attempt in range(1, max_attempts + 1):
-            try:
-                target = self._find_clickable_text(page_name)
-                target.scroll_into_view_if_needed()
-                ui_sleep("short")
-                target.click()
-                ui_sleep("xlong")
-                try:
-                    self.page.wait_for_load_state("networkidle", timeout=15000)
-                except PlaywrightTimeout:
-                    pass
-                logger.info("已导航到综合查询「%s」", page_name)
-                return
-            except Exception as e:
-                last_err = e
-                logger.warning("点击综合查询目标「%s」第 %d/%d 次失败: %s",
-                               page_name, attempt, max_attempts, e)
-                if attempt < max_attempts:
-                    # 兜底：展开左侧面板中折叠的分组，暴露隐藏的叶子项后重试
-                    self._expand_collapsed_left_panel()
-                    ui_sleep("long")
-
-        logger.error("点击综合查询目标「%s」失败: %s", page_name, last_err)
-        self._save_debug_screenshot(f"comp_target_{page_name}_failed")
-        raise PlaywrightTimeout(
-            f"无法点击综合查询目标页「{page_name}」"
-        )
-
-    def _expand_collapsed_left_panel(self):
-        """
-        兜底：展开综合查询左侧面板中处于折叠状态的分组，暴露隐藏的叶子项。
-
-        综合查询左侧面板为手风琴/可折叠菜单，目标叶子可能位于某个未展开的
-        子分组下。当 subcategory 仅指定了顶部标签（如「市场运营」）而未显式
-        给出子分组时，直接查找叶子可能因其不可见而失败。本方法在主页面与所有
-        iframe 中尽力点击处于「折叠态」的分组头，将其展开。
-
-        为避免误将已展开分组重新折叠，仅点击明确判定为折叠态的元素
-        （aria-expanded="false" 或含 collapsed/is-closed 等类名），全程 best-effort。
-        """
-        header_selectors = [
-            '.el-collapse-item__header',          # Element UI 折叠面板头
-            '.el-submenu__title',                 # Element UI 子菜单标题
-            '[class*="accordion"] [class*="header"]',
-            '[class*="collapse"] [class*="title"]',
-            '[class*="panel"] [class*="header"]',
-        ]
-        contexts = [self.page]
         try:
-            contexts += [f for f in self.page.frames if f != self.page.main_frame]
-        except Exception:
-            pass
-
-        expanded = 0
-        for ctx in contexts:
-            for sel in header_selectors:
-                try:
-                    items = ctx.locator(sel)
-                    count = min(items.count(), 20)  # 上限保护，避免异常页面死循环
-                except Exception:
-                    continue
-                for i in range(count):
-                    try:
-                        el = items.nth(i)
-                        if not el.is_visible():
-                            continue
-                        aria = el.get_attribute("aria-expanded")
-                        cls = el.get_attribute("class") or ""
-                        # 已展开则跳过，避免点击导致重新折叠
-                        if aria == "true" or "is-active" in cls or "is-opened" in cls:
-                            continue
-                        collapsed = (
-                            aria == "false"
-                            or "collapsed" in cls
-                            or "is-collapse" in cls
-                            or "is-closed" in cls
-                        )
-                        if not collapsed:
-                            continue
-                        el.scroll_into_view_if_needed()
-                        el.click()
-                        expanded += 1
-                        ui_sleep("short")
-                    except Exception:
-                        continue
-
-        if expanded:
-            logger.info("左侧面板兜底展开了 %d 个折叠分组", expanded)
-        else:
-            logger.debug("左侧面板兜底：未发现可展开的折叠分组")
-        return expanded
+            target = self._find_clickable_text(page_name)
+            target.scroll_into_view_if_needed()
+            ui_sleep("short")
+            target.click()
+            ui_sleep("xlong")
+            try:
+                self.page.wait_for_load_state("networkidle", timeout=15000)
+            except PlaywrightTimeout:
+                pass
+            logger.info("已导航到综合查询「%s」", page_name)
+        except Exception as e:
+            logger.error("点击综合查询目标「%s」失败: %s", page_name, e)
+            self._save_debug_screenshot(f"comp_target_{page_name}_failed")
+            raise PlaywrightTimeout(
+                f"无法点击综合查询目标页「{page_name}」"
+            )
 
     # ── 内容区操作 ────────────────────────────────────────────
 
