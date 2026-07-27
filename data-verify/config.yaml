@@ -817,6 +817,268 @@ validators:
       channel_consistency:
         enabled: false
 
+  # ----------------------------------------------------------
+  # 现货日前出清电量 - 日期一致性校验
+  # ----------------------------------------------------------
+  - name: "现货日前出清电量"
+    enabled: true
+
+    file_pattern:
+      prefix: "现货日前出清电量_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 现货实时出清电量 - 日期一致性校验
+  # ----------------------------------------------------------
+  - name: "现货实时出清电量"
+    enabled: true
+
+    file_pattern:
+      prefix: "现货实时出清电量_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 现货出清电价 - 日期一致性校验
+  # ----------------------------------------------------------
+  - name: "现货出清电价"
+    enabled: true
+
+    file_pattern:
+      prefix: "现货出清电价_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 统一结算点电价 - 日期一致性校验
+  # ----------------------------------------------------------
+  - name: "统一结算点电价"
+    enabled: true
+
+    file_pattern:
+      prefix: "统一结算点电价_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 日前平均申报电价 - 日期一致性校验
+  # ----------------------------------------------------------
+  - name: "日前平均申报电价"
+    enabled: true
+
+    file_pattern:
+      prefix: "日前平均申报电价_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 辅助服务需求总量 - 日期一致性校验
+  # ----------------------------------------------------------
+  - name: "辅助服务需求总量"
+    enabled: true
+
+    file_pattern:
+      prefix: "辅助服务需求总量_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 辅助服务市场申报信息 - 日期一致性校验
+  # ----------------------------------------------------------
+  - name: "辅助服务市场申报信息"
+    enabled: true
+
+    file_pattern:
+      prefix: "辅助服务市场申报信息_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 具备参与辅助服务市场的机组台数及容量用户及售电公司个数等 - 日期一致性校验
+  # ----------------------------------------------------------
+  - name: "具备参与辅助服务市场的机组台数及容量用户及售电公司个数等"
+    enabled: true
+
+    file_pattern:
+      prefix: "具备参与辅助服务市场的机组台数及容量用户及售电公司个数等_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 关键输电断面及线路传输限额 - 日期一致性校验
+  # ----------------------------------------------------------
+  - name: "关键输电断面及线路传输限额"
+    enabled: true
+
+    file_pattern:
+      prefix: "关键输电断面及线路传输限额_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: true
+        date_header_keywords: ["日期", "时间"]
+        date_formats: ["%Y-%m-%d", "%Y/%m/%d"]
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 省内关键输电断面可用容量（年） - 仅完整性校验
+  # （年度数据跨全年，表内日期与文件名日期无对应关系，不做日期一致性校验）
+  # ----------------------------------------------------------
+  - name: "省内关键输电断面可用容量（年）"
+    enabled: true
+
+    file_pattern:
+      prefix: "省内关键输电断面可用容量（年）_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: false
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 省内关键输电断面可用容量（月） - 仅完整性校验
+  # （月度数据跨全月，表内日期与文件名日期无对应关系，不做日期一致性校验）
+  # ----------------------------------------------------------
+  - name: "省内关键输电断面可用容量（月）"
+    enabled: true
+
+    file_pattern:
+      prefix: "省内关键输电断面可用容量（月）_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: false
+      channel_consistency:
+        enabled: false
+
+  # ----------------------------------------------------------
+  # 省内关键输电断面可用容量（周） - 仅完整性校验
+  # （文件名日期为所在周的周日，crawler 侧 date_align=week_sunday 会自动对齐；
+  #   表内数据覆盖整周，不做日期一致性校验）
+  # ----------------------------------------------------------
+  - name: "省内关键输电断面可用容量（周）"
+    enabled: true
+
+    file_pattern:
+      prefix: "省内关键输电断面可用容量（周）_"
+      extensions: [".xlsx"]
+      name_format: "prefix_date"
+
+    checks:
+      completeness:
+        enabled: true
+        expected_count: 1
+      date_consistency:
+        enabled: false
+      channel_consistency:
+        enabled: false
+
 # ============================================================
 # 新增校验对象模板（复制此模板并填写）
 # ============================================================

@@ -18,6 +18,28 @@ def shift_date_str(date_str: str, offset_days: int) -> str:
     return (dt + timedelta(days=offset_days)).strftime(DATE_FMT)
 
 
+def align_date_str(date_str: str, date_align: Optional[str]) -> str:
+    """将日期按任务级对齐规则调整。
+
+    支持的对齐方式：
+    - "week_sunday"：对齐到该日期所在周（周一~周日）末尾的周日。
+      适用于日期选择器仅接受周日的周级数据页面
+      （如「省内关键输电断面可用容量（周）」）。
+    """
+    if not date_align:
+        return date_str
+    if date_align == "week_sunday":
+        dt = datetime.strptime(date_str, DATE_FMT).date()
+        # weekday(): 周一=0 ... 周日=6，加 (6 - weekday) 天即为本周周日
+        return (dt + timedelta(days=6 - dt.weekday())).strftime(DATE_FMT)
+    raise ValueError(f"未知的 date_align 配置: {date_align}")
+
+
+def resolve_task_date_align(task_config: Optional[dict]) -> Optional[str]:
+    """解析任务的日期对齐配置（未配置返回 None）。"""
+    return (task_config or {}).get("date_align") or None
+
+
 def generate_date_list(start_date: str, end_date: str) -> List[str]:
     """生成闭区间日期列表。"""
     start = datetime.strptime(start_date, DATE_FMT).date()
@@ -74,11 +96,16 @@ def apply_task_offset_to_range(
     task_config: Optional[dict],
     schedule_cfg: Optional[dict],
 ) -> Tuple[str, str]:
-    """将任务偏移应用到日期范围。"""
+    """将任务偏移与日期对齐应用到日期范围。"""
     offset_days = resolve_task_offset_days(task_config, schedule_cfg)
-    if offset_days == 0:
-        return start_date, end_date
-    return shift_date_str(start_date, offset_days), shift_date_str(end_date, offset_days)
+    date_align = resolve_task_date_align(task_config)
+    if offset_days:
+        start_date = shift_date_str(start_date, offset_days)
+        end_date = shift_date_str(end_date, offset_days)
+    if date_align:
+        start_date = align_date_str(start_date, date_align)
+        end_date = align_date_str(end_date, date_align)
+    return start_date, end_date
 
 
 def build_task_schedule_ranges(
@@ -101,8 +128,16 @@ def apply_task_offset_to_dates(
     task_config: Optional[dict],
     schedule_cfg: Optional[dict],
 ) -> List[str]:
-    """将任务偏移应用到日期列表。"""
+    """将任务偏移与日期对齐应用到日期列表。
+
+    配置了 date_align 的任务，对齐后可能出现重复日期
+    （如同一周内多天均对齐到同一个周日），去重后保持原顺序返回。
+    """
     offset_days = resolve_task_offset_days(task_config, schedule_cfg)
-    if offset_days == 0:
-        return list(dates)
-    return [shift_date_str(d, offset_days) for d in dates]
+    date_align = resolve_task_date_align(task_config)
+    result = list(dates)
+    if offset_days:
+        result = [shift_date_str(d, offset_days) for d in result]
+    if date_align:
+        result = list(dict.fromkeys(align_date_str(d, date_align) for d in result))
+    return result

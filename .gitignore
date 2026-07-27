@@ -14,3 +14,5 @@ data-verify/validation_errors.txt
 post-process/data/*
 post-process/output/*
 post-process/logs/*
+
+.idea

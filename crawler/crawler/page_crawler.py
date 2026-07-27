@@ -17,6 +17,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from playwright.sync_api import Page, Frame
 
+from common.task_date_policy import align_date_str
 from crawler.navigator import Navigator
 from crawler.filter_handler import FilterHandler
 from crawler.export_handler import ExportHandler
@@ -56,6 +57,8 @@ class PageCrawler:
         self._task_iframe_id: Optional[str] = None
         # 「不选」下拉清空状态：清空过一次后，后续日期迭代无需重复清空
         self._dropdown_cleared_for_none: bool = False
+        # 当前任务的导航菜单文本（nav_page_name 覆盖，用于菜单文本与任务名不一致的页面）
+        self._nav_page_name: Optional[str] = None
 
     # ── iframe 上下文切换 ────────────────────────────────────────
 
@@ -414,7 +417,8 @@ class PageCrawler:
             self.navigator._info_disclosure_expanded = False
             self.navigator._current_category = None
 
-            self.navigator.navigate_to_page(category, task_name, subcategory)
+            self.navigator.navigate_to_page(
+                category, self._nav_page_name or task_name, subcategory)
 
             # 重置 iframe 记录并重新检测
             self._current_iframe_id = None
@@ -570,6 +574,9 @@ class PageCrawler:
 
         category = task_config.get("category", "")
         subcategory = task_config.get("subcategory", None)
+        # 菜单显示文本与任务名不一致时（如菜单文本过长、含标点差异），
+        # 用 nav_page_name 覆盖导航点击时匹配的文本（支持唯一前缀，靠包含匹配命中）
+        self._nav_page_name = task_config.get("nav_page_name") or task_name
         has_dropdown = task_config.get("has_dropdown", False)
         dropdown_label = task_config.get("dropdown_label", "")
         has_export = task_config.get("has_export", False)
@@ -604,7 +611,8 @@ class PageCrawler:
                     self.navigator._info_disclosure_expanded = False
                     self.navigator._current_category = None
                     self.navigator.wait_for_sidebar_ready()
-                self.navigator.navigate_to_page(category, task_name, subcategory)
+                self.navigator.navigate_to_page(
+                    category, self._nav_page_name, subcategory)
                 nav_success = True
                 break
             except Exception as e:
@@ -715,6 +723,17 @@ class PageCrawler:
             date_list = self._generate_date_list(start_date, end_date)
         else:
             logger.info("使用指定日期列表（共 %d 天），跳过增量检查", len(date_list))
+
+        # 任务级日期对齐（如周级页面仅接受周日）：对齐后去重，保持原顺序
+        date_align = task_config.get("date_align")
+        if date_align:
+            aligned = list(dict.fromkeys(
+                align_date_str(d, date_align) for d in date_list
+            ))
+            logger.info("任务配置了日期对齐（%s）：%d 天 → 对齐去重后 %d 天",
+                        date_align, len(date_list), len(aligned))
+            date_list = aligned
+
         total_dates = len(date_list)
 
         for date_idx, date_str in enumerate(date_list):

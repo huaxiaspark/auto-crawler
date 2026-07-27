@@ -388,3 +388,131 @@ tasks:
     has_dropdown: false
     has_pagination: false
     export_type: "原样导出"
+
+  现货日前出清电量:
+    enabled: true
+    category: "综合查询"
+    subcategory: "市场运营 > 交易组织及出清 > 现货出清电价电量"
+    schedule_date_offset_days: 0  # 日前市场：抓取当天
+    has_export: true
+    has_dropdown: false
+    has_pagination: false
+    export_type: "原样导出"
+
+  现货实时出清电量:
+    enabled: true
+    category: "综合查询"
+    subcategory: "市场运营 > 交易组织及出清 > 现货出清电价电量"
+    schedule_date_offset_days: -1  # 实时市场：整日数据次日可得，抓取昨天
+    has_export: true
+    has_dropdown: false
+    has_pagination: false
+    export_type: "原样导出"
+
+  现货出清电价:
+    enabled: true
+    category: "综合查询"
+    subcategory: "市场运营 > 交易组织及出清 > 现货出清电价电量"
+    schedule_date_offset_days: -1  # 页面含实时电价，整日数据次日可得，抓取昨天
+    has_export: true
+    has_dropdown: false
+    has_pagination: false
+    export_type: "原样导出"
+
+  统一结算点电价:
+    enabled: true
+    category: "综合查询"
+    subcategory: "市场运营 > 交易组织及出清 > 现货出清电价电量"
+    schedule_date_offset_days: -1  # 页面含实时结算电价，整日数据次日可得，抓取昨天
+    has_export: true
+    has_dropdown: false
+    has_pagination: false
+    export_type: "原样导出"
+
+  日前平均申报电价:
+    enabled: true
+    category: "综合查询"
+    subcategory: "市场运营 > 交易组织及出清 > 现货市场申报信息"
+    schedule_date_offset_days: 0  # 日前申报数据，当天数据前一日申报后即已发布，抓取当天
+    has_export: true
+    has_dropdown: false
+    has_pagination: false
+    export_type: "原样导出"
+
+  辅助服务需求总量:
+    enabled: true
+    category: "综合查询"
+    subcategory: "市场运营 > 交易组织及出清"
+    schedule_date_offset_days: 0  # 日前披露数据，当天数据前一日即已发布，抓取当天
+    has_export: true
+    has_dropdown: false
+    has_pagination: false
+    export_type: "原样导出"
+
+  辅助服务市场申报信息:
+    enabled: true
+    category: "综合查询"
+    # 三级菜单全名「辅助服务市场申报、出清信息」在左侧面板被截断显示，用唯一前缀做包含匹配
+    subcategory: "市场运营 > 交易组织及出清 > 辅助服务市场申报、出清信息"
+    schedule_date_offset_days: 0  # 日前申报数据，当天数据前一日申报后即已发布，抓取当天
+    has_export: true
+    has_dropdown: false
+    has_pagination: false
+    export_type: "原样导出"
+
+  具备参与辅助服务市场的机组台数及容量用户及售电公司个数等:
+    enabled: true
+    category: "综合查询"
+    subcategory: "供需与约束 > 约束信息"
+    # 左侧面板菜单文本过长被截断显示，用唯一前缀做包含匹配，避免全名标点差异导致定位失败
+    nav_page_name: "具备参与辅助服务市场的"
+    schedule_date_offset_days: 0  # 日前披露数据，当天数据前一日即已发布，抓取当天
+    has_export: true
+    has_dropdown: false
+    has_pagination: false
+    export_type: "原样导出"
+
+  省内关键输电断面可用容量（年）:
+    enabled: true
+    category: "综合查询"
+    subcategory: "供需与约束 > 约束信息"
+    schedule_date_offset_days: 0  # 年度披露数据，任意日期均可查到所在年份数据，抓取当天
+    has_export: true
+    has_dropdown: false
+    has_pagination: false
+    export_type: "原样导出"
+
+  省内关键输电断面可用容量（月）:
+    enabled: true
+    category: "综合查询"
+    subcategory: "供需与约束 > 约束信息"
+    schedule_date_offset_days: 0  # 月度披露数据，任意日期均可查到所在月份数据，抓取当天
+    has_export: true
+    has_dropdown: false
+    has_pagination: false
+    export_type: "原样导出"
+
+  省内关键输电断面可用容量（周）:
+    enabled: true
+    category: "综合查询"
+    subcategory: "供需与约束 > 约束信息"
+    schedule_date_offset_days: 0
+    # 该页面日期选择器仅接受周日：基准日对齐到所在周（周一~周日）末尾的周日
+    date_align: "week_sunday"
+    has_export: true
+    has_dropdown: false
+    has_pagination: false
+    export_type: "原样导出"
+
+  关键输电断面及线路传输限额:
+    enabled: true
+    category: "综合查询"
+    subcategory: "供需与约束 > 约束信息"
+    # 左侧面板菜单文本过长被截断显示，用唯一前缀做包含匹配
+    nav_page_name: "关键输电断面及线路传输"
+    schedule_date_offset_days: 0  # 日前披露数据，当天数据前一日即已发布，抓取当天
+    has_export: true
+    has_dropdown: false
+    has_pagination: true
+    has_page_size: true  # 日期后有「每页条数」选择器，默认 30 条，最大 50 条
+    export_type: "原样导出"
