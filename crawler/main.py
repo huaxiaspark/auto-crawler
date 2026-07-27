@@ -395,6 +395,7 @@ def main():
   python main.py --task 日前备用总量           # 爬取指定任务
   python main.py --task "日前备用总量,断面约束" # 爬取多个任务
   python main.py --start 2025-06-01 --end 2025-06-30  # 指定日期范围
+  python main.py --output-dir /path/to/data           # 指定数据输出根目录
   python main.py --loss-file ../data-verify/loss.txt  # 从校验缺失文件批量补充下载
   python main.py --validate                   # 仅验证数据质量
   python main.py --schedule                   # 定时调度模式
@@ -418,6 +419,9 @@ def main():
                         help="列出所有可用任务")
     parser.add_argument("--loss-file", default=None,
                         help="从数据校验生成的缺失文件列表（loss.txt）批量补充下载，格式：名称,日期[,通道名称]")
+    parser.add_argument("--output-dir", default=None,
+                        help="数据输出根目录，覆盖配置中的 storage.output_dir，"
+                             "导出下载目录同步指向该目录下的 exports 子目录")
     parser.add_argument("--scheduled-run", action="store_true",
                         help="按 schedule 配置将传入日期视为调度触发日期范围，并对任务应用日期偏移")
 
@@ -425,6 +429,12 @@ def main():
 
     # 加载配置
     config = load_config(args.config)
+
+    # 命令行指定输出目录时，覆盖配置中的存储目录与导出下载目录
+    if args.output_dir:
+        output_dir = os.path.abspath(os.path.expanduser(args.output_dir))
+        config.setdefault("storage", {})["output_dir"] = output_dir
+        config.setdefault("browser", {})["download_dir"] = os.path.join(output_dir, "exports")
 
     # 初始化日志
     setup_logger(config)
