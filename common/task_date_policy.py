@@ -52,6 +52,24 @@ def resolve_task_date_align(task_config: Optional[dict]) -> Optional[str]:
     return (task_config or {}).get("date_align") or None
 
 
+def format_date_for_input(date_str: str, date_input_format: Optional[str]) -> str:
+    """将内部日期（YYYY-MM-DD）转换为页面日期输入框接受的格式。
+
+    部分周期数据页面的日期控件不接受完整日期：
+    - "%Y"：年级页面（如「省内关键输电断面可用容量（年）」），
+      2026-01-01 → "2026"
+    - "%Y-%m"：月级页面（如「省内关键输电断面可用容量（月）」），
+      2026-07-01 → "2026-07"
+
+    仅影响填入页面控件的值；文件命名、去重、校验等内部流程
+    仍使用完整的 YYYY-MM-DD 日期。
+    """
+    if not date_input_format:
+        return date_str
+    dt = datetime.strptime(date_str, DATE_FMT).date()
+    return dt.strftime(date_input_format)
+
+
 def generate_date_list(start_date: str, end_date: str) -> List[str]:
     """生成闭区间日期列表。"""
     start = datetime.strptime(start_date, DATE_FMT).date()

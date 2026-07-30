@@ -17,7 +17,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 from playwright.sync_api import Page, Frame
 
-from common.task_date_policy import align_date_str
+from common.task_date_policy import align_date_str, format_date_for_input
 from crawler.navigator import Navigator
 from crawler.filter_handler import FilterHandler
 from crawler.export_handler import ExportHandler
@@ -501,6 +501,18 @@ class PageCrawler:
     # ── 主流程 ────────────────────────────────────────────────────
 
     @staticmethod
+    def _input_date(task_config: dict, date_str: str) -> str:
+        """
+        按任务的 date_input_format 配置将内部日期转为页面输入值。
+
+        年/月级页面的日期控件不接受完整日期（如年页面只接受 "2026"，
+        月页面只接受 "2026-07"），仅在填入控件时转换格式；
+        文件命名、去重、校验等内部流程仍使用 YYYY-MM-DD。
+        """
+        return format_date_for_input(
+            date_str, (task_config or {}).get("date_input_format"))
+
+    @staticmethod
     def _normalize_progress_label(label: str) -> str:
         """
         将下拉标签标准化，用于跨目录（导出目录/CSV目录）匹配已完成状态。
@@ -777,7 +789,9 @@ class PageCrawler:
                 if dual_date:
                     self.filter_handler.set_dual_date(date_str)
                 else:
-                    self.filter_handler.set_date(date_str, quick_mode=use_quick_mode)
+                    self.filter_handler.set_date(
+                        self._input_date(task_config, date_str),
+                        quick_mode=use_quick_mode)
                 if not use_quick_mode:
                     ui_sleep("medium")
             except Exception as e:
@@ -793,7 +807,8 @@ class PageCrawler:
                             self.filter_handler.set_dual_date(date_str)
                         else:
                             self.filter_handler.set_date(
-                                date_str, quick_mode=use_quick_mode)
+                                self._input_date(task_config, date_str),
+                                quick_mode=use_quick_mode)
                         if not use_quick_mode:
                             ui_sleep("medium")
                     else:
@@ -829,7 +844,9 @@ class PageCrawler:
                             category, task_name, subcategory)
                         if recovered:
                             self._ensure_content_frame()
-                            self.filter_handler.set_date(date_str, quick_mode=False)
+                            self.filter_handler.set_date(
+                                self._input_date(task_config, date_str),
+                                quick_mode=False)
                             ui_sleep("medium")
                             self._wait_for_dropdown_refresh(dropdown_label)
                             dropdown_options = self.filter_handler.get_dropdown_options(
@@ -1007,7 +1024,8 @@ class PageCrawler:
             logger.info("[%d/%d] 日期: %s, %s: %s", idx + 1, total, date_str, dropdown_label, option)
             try:
                 self._ensure_content_frame()
-                self.filter_handler.set_date(date_str, quick_mode=False)
+                self.filter_handler.set_date(
+                    self._input_date(task_config, date_str), quick_mode=False)
                 ui_sleep("medium")
             except Exception as e:
                 logger.error("设置日期失败 [%s]: %s", date_str, e)
@@ -1016,7 +1034,9 @@ class PageCrawler:
                         category, task_name, task_config.get("subcategory")
                     )
                     if recovered:
-                        self.filter_handler.set_date(date_str, quick_mode=False)
+                        self.filter_handler.set_date(
+                            self._input_date(task_config, date_str),
+                            quick_mode=False)
                         ui_sleep("medium")
                     else:
                         sleep_seconds(self.date_interval)
@@ -1153,7 +1173,9 @@ class PageCrawler:
                     if task_config.get("dual_date", False):
                         self.filter_handler.set_dual_date(date_str)
                     else:
-                        self.filter_handler.set_date(date_str, quick_mode=True)
+                        self.filter_handler.set_date(
+                            self._input_date(task_config, date_str),
+                            quick_mode=True)
                     ui_sleep("medium")
                 self._do_crawl_export_all(
                     task_name, task_config, date_str, category, export_type,
@@ -1235,7 +1257,8 @@ class PageCrawler:
             if dual_date:
                 self.filter_handler.set_dual_date(date_str)
             else:
-                self.filter_handler.set_date(date_str)
+                self.filter_handler.set_date(
+                    self._input_date(task_config, date_str))
             ui_sleep("medium")
 
         # 2. 设置下拉选项（先选下拉，再点查询）

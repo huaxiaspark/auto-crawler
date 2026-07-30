@@ -480,6 +480,9 @@ tasks:
     # 年度数据仅以年份粒度判断：日期对齐到所在年 1 月 1 日，同年多天去重后只爬一次
     # （如 start=2026-01-01、end=2026-07-29 仅爬 2026 年一次）
     date_align: "year_start"
+    # 页面日期控件为年选择器，只接受年份（如 "2026"），填入时转换格式；
+    # 文件命名、去重、校验仍用完整日期（如 2026-01-01）
+    date_input_format: "%Y"
     has_export: true
     has_dropdown: false
     has_pagination: false
@@ -493,6 +496,9 @@ tasks:
     # 月度数据仅以年月粒度判断：日期对齐到所在月 1 号，同月多天去重后只爬一次
     # （如 start=2026-01-01、end=2026-07-29 仅爬 2026-01 ~ 2026-07 共 7 次）
     date_align: "month_start"
+    # 页面日期控件为月选择器，只接受年月（如 "2026-07"），填入时转换格式；
+    # 文件命名、去重、校验仍用完整日期（如 2026-07-01）
+    date_input_format: "%Y-%m"
     has_export: true
     has_dropdown: false
     has_pagination: false
