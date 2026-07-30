@@ -477,6 +477,9 @@ tasks:
     category: "综合查询"
     subcategory: "供需与约束 > 约束信息"
     schedule_date_offset_days: 0  # 年度披露数据，任意日期均可查到所在年份数据，抓取当天
+    # 年度数据仅以年份粒度判断：日期对齐到所在年 1 月 1 日，同年多天去重后只爬一次
+    # （如 start=2026-01-01、end=2026-07-29 仅爬 2026 年一次）
+    date_align: "year_start"
     has_export: true
     has_dropdown: false
     has_pagination: false
@@ -487,6 +490,9 @@ tasks:
     category: "综合查询"
     subcategory: "供需与约束 > 约束信息"
     schedule_date_offset_days: 0  # 月度披露数据，任意日期均可查到所在月份数据，抓取当天
+    # 月度数据仅以年月粒度判断：日期对齐到所在月 1 号，同月多天去重后只爬一次
+    # （如 start=2026-01-01、end=2026-07-29 仅爬 2026-01 ~ 2026-07 共 7 次）
+    date_align: "month_start"
     has_export: true
     has_dropdown: false
     has_pagination: false

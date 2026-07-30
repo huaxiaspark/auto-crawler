@@ -25,6 +25,12 @@ def align_date_str(date_str: str, date_align: Optional[str]) -> str:
     - "week_sunday"：对齐到该日期所在周（周一~周日）末尾的周日。
       适用于日期选择器仅接受周日的周级数据页面
       （如「省内关键输电断面可用容量（周）」）。
+    - "month_start"：对齐到该日期所在月的 1 号。
+      适用于按月披露的页面（如「省内关键输电断面可用容量（月）」），
+      仅以年月粒度判断日期，同月内多天对齐去重后只爬取一次。
+    - "year_start"：对齐到该日期所在年的 1 月 1 日。
+      适用于按年披露的页面（如「省内关键输电断面可用容量（年）」），
+      仅以年份粒度判断日期，同年内多天对齐去重后只爬取一次。
     """
     if not date_align:
         return date_str
@@ -32,6 +38,12 @@ def align_date_str(date_str: str, date_align: Optional[str]) -> str:
         dt = datetime.strptime(date_str, DATE_FMT).date()
         # weekday(): 周一=0 ... 周日=6，加 (6 - weekday) 天即为本周周日
         return (dt + timedelta(days=6 - dt.weekday())).strftime(DATE_FMT)
+    if date_align == "month_start":
+        dt = datetime.strptime(date_str, DATE_FMT).date()
+        return dt.replace(day=1).strftime(DATE_FMT)
+    if date_align == "year_start":
+        dt = datetime.strptime(date_str, DATE_FMT).date()
+        return dt.replace(month=1, day=1).strftime(DATE_FMT)
     raise ValueError(f"未知的 date_align 配置: {date_align}")
 
 
